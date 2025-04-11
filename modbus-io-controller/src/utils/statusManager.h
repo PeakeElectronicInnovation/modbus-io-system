@@ -24,8 +24,6 @@
 #define LED_COLOR_MAGENTA 0xFF00FF
 
 // LED indexes
-#define LED_MQTT_STATUS 3
-#define LED_WEBSERVER_STATUS 1
 #define LED_MODBUS_STATUS 1
 #define LED_SYSTEM_STATUS 0
 
@@ -55,10 +53,9 @@ struct StatusVariables
     bool updated;
     // System status variables
     uint32_t ledPulseTS;
-    uint32_t LEDcolour[4]; // 0 = MQTT, 1 = Webserver, 2 = Modbus, 3 = System
+    uint32_t LEDcolour[2]; // 0 = System, 1 = RS485 bus
     bool psuOK;
     bool sdCardOK;
-    bool ipcOK;
     bool rtcOK;
 
     // Modbus status variables
@@ -68,10 +65,6 @@ struct StatusVariables
     // Webserver status variables
     bool webserverUp;
     bool webserverBusy;
-
-    // MQTT status variables
-    bool mqttConnected;
-    bool mqttBusy;
 
     // Power supply voltage variables
     float Vpsu;

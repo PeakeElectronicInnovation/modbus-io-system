@@ -1,6 +1,6 @@
 #pragma once
 
-#define VERSION "1.0.1"
+#define VERSION "1.0.0"
 
 // Include libraries
 #include <Arduino.h>
@@ -12,6 +12,7 @@
 #include <SPI.h>
 #include "Adafruit_Neopixel.h"
 #include "MCP79410.h"
+#include "ModbusRTUMaster.h"
 
 // Include program files
 #include "hardware/pins.h"

@@ -29,20 +29,12 @@ void manageStatus(void)
   // Check for status change and update LED colours accordingly
   if (status.updated) {
     // System status LED colours
-    if (!status.ipcOK || !status.rtcOK) {
+    if (!status.rtcOK) {
       status.LEDcolour[LED_SYSTEM_STATUS] = LED_STATUS_ERROR;
     } else if (!status.psuOK || !status.sdCardOK) {
       status.LEDcolour[LED_SYSTEM_STATUS] = LED_STATUS_WARNING;
     } else {
       status.LEDcolour[LED_SYSTEM_STATUS] = LED_STATUS_OK;
-    }
-    // Webserver status LED colours
-    if (status.webserverBusy) {
-      status.LEDcolour[LED_WEBSERVER_STATUS] = LED_STATUS_BUSY;
-    } else if (status.webserverUp) {
-      status.LEDcolour[LED_WEBSERVER_STATUS] = LED_STATUS_OK;
-    } else {
-      status.LEDcolour[LED_WEBSERVER_STATUS] = LED_STATUS_OFF;
     }
     // Modbus status LED colours
     if (status.modbusConnected) {
@@ -52,17 +44,7 @@ void manageStatus(void)
     } else {
       status.LEDcolour[LED_MODBUS_STATUS] = LED_STATUS_OFF;
     }
-    // MQTT status LED colours
-    if (status.mqttConnected) {
-      status.LEDcolour[LED_MQTT_STATUS] = LED_STATUS_OK;
-    } else if (status.mqttBusy) {
-      status.LEDcolour[LED_MQTT_STATUS] = LED_STATUS_BUSY;
-    } else {
-      status.LEDcolour[LED_MQTT_STATUS] = LED_STATUS_OFF;
-    }
-    leds.setPixelColor(LED_WEBSERVER_STATUS, status.LEDcolour[LED_WEBSERVER_STATUS]);
     leds.setPixelColor(LED_MODBUS_STATUS, status.LEDcolour[LED_MODBUS_STATUS]);
-    leds.setPixelColor(LED_MQTT_STATUS, status.LEDcolour[LED_MQTT_STATUS]);
     // Reset the update flag
     status.updated = false;
   }  

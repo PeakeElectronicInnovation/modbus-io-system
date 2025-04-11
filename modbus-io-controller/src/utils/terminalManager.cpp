@@ -41,11 +41,9 @@ void manageTerminal(void)
         } else {
           statusLocked = true;
           log(LOG_INFO, false, "24V supply %0.1fV status: %s\n", status.Vpsu, status.psuOK ? "OK" : "OUT OF RANGE");
-          log(LOG_INFO, false, "IPC status: %s\n", status.ipcOK ? "OK" : "ERROR");
           log(LOG_INFO, false, "RTC status: %s\n", status.rtcOK ? "OK" : "ERROR");
           log(LOG_INFO, false, "Modbus status: %s\n", status.modbusConnected ? "CONNECTED" : "DOWN");
           log(LOG_INFO, false, "Webserver status: %s\n", status.webserverUp ? "OK" : "DOWN");
-          log(LOG_INFO, false, "MQTT status: %s\n", status.mqttConnected ? "CONNECTED" : "DOWN");
           statusLocked = false;
         }
       }
