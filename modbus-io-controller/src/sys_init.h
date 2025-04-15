@@ -27,6 +27,8 @@
 
 #include "storage/sdManager.h"
 
+#include "io_core/io_core.h"
+
 void init_core0(void);
 void init_core1(void);
 void manage_core0(void);

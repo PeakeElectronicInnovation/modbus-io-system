@@ -87,51 +87,51 @@ uint8_t MCP960x::updateStatus() {
 }
 
 // Alert functions ---------------------------------------------------------------------
-float MCP960x::readAlarmSP(uint8_t alarm) {
-    if (alarm > 3) {
-        Serial.println("Error: Invalid alarm number. Must be 0-3.");
-        return 0.0; // Return 0 if alarm number is invalid
+float MCP960x::readAlertSP(uint8_t alert) {
+    if (alert > 3) {
+        Serial.println("Error: Invalid alert number. Must be 0-3.");
+        return 0.0; // Return 0 if alert number is invalid
     }
     uint8_t buffer[2];
-    if (readRegister(MCP960x_REG_ALERT1_LIMIT + alarm, buffer, 2)) {
+    if (readRegister(MCP960x_REG_ALERT1_LIMIT + alert, buffer, 2)) {
         int16_t rawTemp = (buffer[0] << 8) | buffer[1];
         return rawTemp * 0.0625; // Convert to Celsius
     }
-    Serial.println("Error: Failed to read alarm setpoint from MCP960x.");
+    Serial.println("Error: Failed to read alert setpoint from MCP960x.");
     return 0.0; // Return 0 if read fails
 }
 
-bool MCP960x::setAlarmSP(uint8_t alarm, float temperature) {
-    if (alarm > 3) {
-        Serial.println("Error: Invalid alarm number. Must be 0-3.");
-        return false; // Return false if alarm number is invalid
+bool MCP960x::setAlertSP(uint8_t alert, float temperature) {
+    if (alert > 3) {
+        Serial.println("Error: Invalid alert number. Must be 0-3.");
+        return false; // Return false if alert number is invalid
     }
     int16_t rawTemp = static_cast<int16_t>(temperature / 0.0625); // Convert to raw temperature
     uint8_t buffer[2];
     buffer[0] = rawTemp >> 8; // Convert to raw temperature
     buffer[1] = rawTemp & 0xFF; // Convert to raw temperature
-    return writeRegister(MCP960x_REG_ALERT1_LIMIT + alarm, buffer, 2); // Write to the register
+    return writeRegister(MCP960x_REG_ALERT1_LIMIT + alert, buffer, 2); // Write to the register
 }
 
-uint8_t MCP960x::readAlarmHyst(uint8_t alarm) {
-    if (alarm > 3) {
-        Serial.println("Error: Invalid alarm number. Must be 0-3.");
-        return 0.0; // Return 0 if alarm number is invalid
+uint8_t MCP960x::readAlertHyst(uint8_t alert) {
+    if (alert > 3) {
+        Serial.println("Error: Invalid alert number. Must be 0-3.");
+        return 0.0; // Return 0 if alert number is invalid
     }
     uint8_t buffer;
-    if (readRegister(MCP960x_REG_ALERT1_HYST + alarm, &buffer, 1)) {
-        return buffer; // Return the alarm hysteresis value
+    if (readRegister(MCP960x_REG_ALERT1_HYST + alert, &buffer, 1)) {
+        return buffer; // Return the alert hysteresis value
     }
-    Serial.println("Error: Failed to read alarm hysteresis from MCP960x.");
+    Serial.println("Error: Failed to read alert hysteresis from MCP960x.");
     return 0; // Return 0 if read fails
 }
 
-bool MCP960x::setAlarmHyst(uint8_t alarm, uint8_t temperature) {
-    if (alarm > 3) {
-        Serial.println("Error: Invalid alarm number. Must be 0-3.");
-        return false; // Return false if alarm number is invalid
+bool MCP960x::setAlertHyst(uint8_t alert, uint8_t temperature) {
+    if (alert > 3) {
+        Serial.println("Error: Invalid alert number. Must be 0-3.");
+        return false; // Return false if alert number is invalid
     }
-    return writeRegister(MCP960x_REG_ALERT1_HYST + alarm, &temperature, 1); // Write to the register
+    return writeRegister(MCP960x_REG_ALERT1_HYST + alert, &temperature, 1); // Write to the register
 }
 
 bool MCP960x::enableAlert(uint8_t alert, bool enable) {
@@ -192,7 +192,7 @@ bool MCP960x::setAlartEdge(uint8_t alert, bool rising) {
     uint8_t buffer[1];
     if (readRegister(MCP960x_REG_ALERT1_CONFIG + alert, buffer, 1)) {
         if (rising) {
-            buffer[0] |= MCP960x_CONFIG_ALERT_EDGE_bm; // Set alert edge to alarm on rise
+            buffer[0] |= MCP960x_CONFIG_ALERT_EDGE_bm; // Set alert edge to alert on rise
         } else {
             buffer[0] &= ~MCP960x_CONFIG_ALERT_EDGE_bm; // Alert on falling temperature
         }
@@ -296,7 +296,7 @@ bool MCP960x::setConfig() {
                         (config.alertEdge[i] << MCP960x_CONFIG_ALERT_EDGE_bp) | 
                         (config.alertSensor[i] << MCP960x_CONFIG_ALERT_SENSOR_bp);
         if (!writeRegister(MCP960x_REG_ALERT1_CONFIG + i, configBuf, 1)) return false;
-        if (!setAlarmSP(i, config.alertSP[i])) return false;
+        if (!setAlertSP(i, config.alertSP[i])) return false;
         if (!writeRegister(MCP960x_REG_ALERT1_HYST + i, &config.alertHyst[i], 1)) return false;
     }
     return true;
@@ -326,13 +326,13 @@ void MCP960x::printConfig() {
     readRegister(MCP960x_REG_ALERT4_HYST, configBuf, 1);
     Serial.printf("Alert Hysteresis 4: 0x%02x\n", configBuf[0]);
     Serial.print("Alert Setpoint 1: ");
-    Serial.println(readAlarmSP(0), 2);
+    Serial.println(readAlertSP(0), 2);
     Serial.print("Alert Setpoint 2: ");
-    Serial.println(readAlarmSP(1), 2);
+    Serial.println(readAlertSP(1), 2);
     Serial.print("Alert Setpoint 3: ");
-    Serial.println(readAlarmSP(2), 2);
+    Serial.println(readAlertSP(2), 2);
     Serial.print("Alert Setpoint 4: ");
-    Serial.println(readAlarmSP(3), 2);
+    Serial.println(readAlertSP(3), 2);
     readRegister(MCP960x_REG_STATUS, configBuf, 1);
     Serial.printf("Status: 0x%02x\n", configBuf[0]);
     Serial.print("Temperature: ");

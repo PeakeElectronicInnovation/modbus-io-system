@@ -272,8 +272,15 @@ bool ModbusRTUSlave::_readRequest() {
     }
   } while (micros() - startTime <= _charTimeout && numBytes < MODBUS_RTU_SLAVE_BUF_SIZE);
   while (micros() - startTime < _frameTimeout);
-  if (!_serial->available() && (_buf[0] == _id || _buf[0] == 0) && _crc(numBytes - 2) == _bytesToWord(_buf[numBytes - 1], _buf[numBytes - 2])) return true;
-  else return false;
+  if (!_serial->available() && (_buf[0] == _id || _buf[0] == 0) && _crc(numBytes - 2) == _bytesToWord(_buf[numBytes - 1], _buf[numBytes - 2])) {
+    Serial.printf("ModbusRTUSlave: Received %d bytes: ", numBytes);
+    for (uint8_t i = 0; i < numBytes; i++) {
+      Serial.printf("%02X ", _buf[i]);
+    }
+    Serial.println();
+    return true;
+  }
+  return false;
 }
 
 void ModbusRTUSlave::_writeResponse(uint8_t len) {

@@ -129,15 +129,15 @@ class MCP960x {
         uint8_t updateStatus(); // Update the status structure
 
         // Alerts
-        float readAlarmSP(uint8_t alarm); // Read alarm setpoint in Celsius
-        bool setAlarmSP(uint8_t alarm, float value); // Set alarm setpoint in Celsius
-        uint8_t readAlarmHyst(uint8_t alarm); // Read alarm hysteresis in Celsius
-        bool setAlarmHyst(uint8_t alarm, uint8_t value); // Set alarm hysteresis in Celsius
+        float readAlertSP(uint8_t alert); // Read alert setpoint in Celsius
+        bool setAlertSP(uint8_t alert, float value); // Set alert setpoint in Celsius
+        uint8_t readAlertHyst(uint8_t alert); // Read alert hysteresis in Celsius
+        bool setAlertHyst(uint8_t alert, uint8_t value); // Set alert hysteresis in Celsius
 
         bool enableAlert(uint8_t alert, bool enable); // Enable alert (0-3)
         bool latchAlert(uint8_t alert, bool latch); // Set alert mode (0-3) (0 = comparator/auto clear, 1 = interrupt/latch)
         bool clearAlert(uint8_t alert); // Clear alert (0-3)
-        bool setAlartEdge(uint8_t alert, bool rising); // Set alert edge (0-3) (0 = alarm on fall, 1 = alarm on rise)
+        bool setAlartEdge(uint8_t alert, bool rising); // Set alert edge (0-3) (0 = alert on fall, 1 = alert on rise)
         bool setAlertPolarity(uint8_t alert, bool act_high); // Set alert polarity (0-3) (0 = active low, 1 = active high)
         
         // Configuration

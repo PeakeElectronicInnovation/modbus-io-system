@@ -22,7 +22,8 @@ void init_core1(void) {
     init_powerManager();
     init_terminalManager();
     while (!core0setupComplete) delay(100); // 
-    init_sdManager();   
+    init_sdManager();
+    init_io_core();
 }
 
 void manage_core0(void) {
@@ -35,4 +36,5 @@ void manage_core1(void) {
     managePower();
     manageTerminal();
     manageSD();
+    manage_io_core();
 }

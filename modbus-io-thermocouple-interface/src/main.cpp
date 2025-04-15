@@ -1,5 +1,12 @@
 #include "sys_init.h"
 
+// Early initialization code that runs before main C runtime
+void __attribute__((section(".init3"))) early_init(void) {
+  // Set all Port A pins high immediately after reset
+  PORTA.OUTSET = 0xFF;  // Set all Port A pins high
+  PORTA.DIRSET = 0xFF;  // Set all Port A pins as outputs
+}
+
 void saveConfig() {
   newDataToSave = false;
   EEPROM.put(EEPROM_MODBUSCFG_ADDR, modbusHolding.slaveID);
@@ -31,7 +38,8 @@ void getConfig() {
   EEPROM.get(EEPROM_MODBUSCFG_ADDR, modbusHolding.slaveID);
   if (modbusHolding.slaveID < 245) {
     modbusInitialised = true;
-  }
+    statusLedColour = LED_OK;
+  } else statusLedColour = LED_UNCONFIGURED;
   for(int i = 0; i < 8; i++) {
     EEPROM.get(EEPROM_CONFIG_ADDR + (i * sizeof(tc_config_t)), tcConfig[i]);
   }
@@ -45,11 +53,11 @@ void getConfig() {
     tc[i].config.alertLatch[0] = tcConfig[i].alertLatch;
     tc[i].config.alertEdge[0] = tcConfig[i].alertEdge;
     modbusHolding.type[i] = static_cast<uint16_t>(tcConfig[i].type);
-    modbusHolding.alarmSP[i] = tcConfig[i].alertSP;
-    modbusHolding.alarmHyst[i] = tcConfig[i].alertHyst;
-    modbusOutSet.alarmEnable[i] = tcConfig[i].alertEnable;
-    modbusOutSet.alarmLatch[i] = tcConfig[i].alertLatch;
-    modbusOutSet.alarmEdge[i] = tcConfig[i].alertEdge;
+    modbusHolding.alertSP[i] = tcConfig[i].alertSP;
+    modbusHolding.alertHyst[i] = tcConfig[i].alertHyst;
+    modbusOutSet.alertEnable[i] = tcConfig[i].alertEnable;
+    modbusOutSet.alertLatch[i] = tcConfig[i].alertLatch;
+    modbusOutSet.alertEdge[i] = tcConfig[i].alertEdge;
     modbusOutSet.outputEnable[i] = tcConfig[i].outputEnable;
 
     memcpy(holdingReg, &modbusHolding, sizeof(modbusHolding));
@@ -57,8 +65,8 @@ void getConfig() {
 
     // Debug print
     Serial.printf("Type: %d, SD: ", modbusHolding.type[i]);
-    Serial.print(modbusHolding.alarmSP[i]);
-    Serial.printf(", Hyst: %d, Enable: %d, Latch: %d, Edge: %d, Output Enable: %d\n", modbusHolding.alarmHyst[i], modbusOutSet.alarmEnable[i], modbusOutSet.alarmLatch[i], modbusOutSet.alarmEdge[i], modbusOutSet.outputEnable[i]);
+    Serial.print(modbusHolding.alertSP[i]);
+    Serial.printf(", Hyst: %d, Enable: %d, Latch: %d, Edge: %d, Output Enable: %d\n", modbusHolding.alertHyst[i], modbusOutSet.alertEnable[i], modbusOutSet.alertLatch[i], modbusOutSet.alertEdge[i], modbusOutSet.outputEnable[i]);
   }
 }
 
@@ -69,7 +77,7 @@ void setupModbus() {
   bus.configureHoldingRegisters(holdingReg, 38);
   bus.configureInputRegisters(inputReg, 48);
   if (modbusInitialised) {
-    bus.begin(modbusHolding.slaveID, 115200);
+    bus.begin(modbusHolding.slaveID, 500000);
     commLedColour = LED_OK;
   } else {
     commLedColour = LED_OFF;
@@ -98,7 +106,7 @@ void setupThermocoupleInterface() {
       }
     }
   }
-  statusLedColour = error ? LED_ERROR : LED_OK;
+  statusLedColour = error ? LED_ERROR : modbusInitialised ? LED_OK : LED_UNCONFIGURED;
 
   if (error) {
     Serial.println("Error initializing MCP960x devices. Check connections and power supply.");
@@ -118,6 +126,7 @@ void setupThermocoupleInterface() {
 }
 
 void readAll() {
+  if (!modbusInitialised) return;
   bool error = false;
   // Read data from all MCP9601 ICs and check output states
   for (int i = 0; i < 8; i++) {
@@ -126,7 +135,7 @@ void readAll() {
     modbusInput.deltaJunction[i] = tc[i].readDeltaTemperature();
     if (tc[i].updateStatus() == 0xFF) error = true;
     modbusFlag.outputState[i] = digitalRead(outputFBpin[i]); // Read the output state from the corresponding pin
-    modbusFlag.alarmState[i] = tc[i].status.alert[0];
+    modbusFlag.alertState[i] = tc[i].status.alert[0];
     modbusFlag.openCircuit[i] = tc[i].status.openCircuit;
     modbusFlag.shortCircuit[i] = tc[i].status.shortCircuit;  
   }
@@ -169,38 +178,40 @@ void handleModbus() {
   leds.show();
   Serial.printf("Modbus request recieved, function code: %d\n", FC);
 
+  bool changed = false;
+
   // Handle update to coils
   if (FC == MODBUS_FC05_WRITE_SINGLE_COIL || FC == MODBUS_FC15_WRITE_MULTIPLE_COILS) {
     modbus_coil_t coilData;
     memcpy(&coilData, coil, sizeof(modbus_coil_t)); // Copy the response buffer to the coilData struct
     for (int i = 0; i < 8; i++) {
       if (coilData.outputEnable[i] != modbusOutSet.outputEnable[i]) {
-        newDataToSave = true;
+        changed = true;
         modbusOutSet.outputEnable[i] = coilData.outputEnable[i];
         tcConfig[i].outputEnable = coilData.outputEnable[i];
         Serial.printf("Out Enable %d is: %i\n", i, modbusOutSet.outputEnable[i]);
         digitalWrite(enablePin[i], !modbusOutSet.outputEnable[i]);  // LOW = enabled
       }
-      if (coilData.alarmEnable[i] != modbusOutSet.alarmEnable[i]) {
-        newDataToSave = true;
-        modbusOutSet.alarmEnable[i] = coilData.alarmEnable[i];
-        tcConfig[i].alertEnable = coilData.alarmEnable[i];
-        Serial.printf("Alarm Enable %d is: %i\n", i, modbusOutSet.alarmEnable[i]);
-        tc[i].enableAlert(0, modbusOutSet.alarmEnable[i]);          // 1 = enabled
+      if (coilData.alertEnable[i] != modbusOutSet.alertEnable[i]) {
+        changed = true;
+        modbusOutSet.alertEnable[i] = coilData.alertEnable[i];
+        tcConfig[i].alertEnable = coilData.alertEnable[i];
+        Serial.printf("alert Enable %d is: %i\n", i, modbusOutSet.alertEnable[i]);
+        tc[i].enableAlert(0, modbusOutSet.alertEnable[i]);          // 1 = enabled
       }
-      if (coilData.alarmLatch[i] != modbusOutSet.alarmLatch[i]) {
-        newDataToSave = true;
-        modbusOutSet.alarmLatch[i] = coilData.alarmLatch[i];
-        tcConfig[i].alertLatch = coilData.alarmLatch[i];
-        Serial.printf("Alarm Latch %d is: %i\n", i, modbusOutSet.alarmLatch[i]);
-        tc[i].latchAlert(0, modbusOutSet.alarmLatch[i]);            // 1 = latch, 0 = auto clear (@T_alert - hysteresis value)
+      if (coilData.alertLatch[i] != modbusOutSet.alertLatch[i]) {
+        changed = true;
+        modbusOutSet.alertLatch[i] = coilData.alertLatch[i];
+        tcConfig[i].alertLatch = coilData.alertLatch[i];
+        Serial.printf("alert Latch %d is: %i\n", i, modbusOutSet.alertLatch[i]);
+        tc[i].latchAlert(0, modbusOutSet.alertLatch[i]);            // 1 = latch, 0 = auto clear (@T_alert - hysteresis value)
       }
-      if (coilData.alarmEdge[i] != modbusOutSet.alarmEdge[i]) {
-        newDataToSave = true;
-        modbusOutSet.alarmEdge[i] = coilData.alarmEdge[i];
-        tcConfig[i].alertEdge = coilData.alarmEdge[i];
-        Serial.printf("Alarm Edge %d is: %i\n", i, modbusOutSet.alarmEdge[i]);
-        tc[i].setAlartEdge(0, modbusOutSet.alarmEdge[i]);           // 1 = alarm on falling temp, 0 = alarm on rising temp
+      if (coilData.alertEdge[i] != modbusOutSet.alertEdge[i]) {
+        changed = true;
+        modbusOutSet.alertEdge[i] = coilData.alertEdge[i];
+        tcConfig[i].alertEdge = coilData.alertEdge[i];
+        Serial.printf("alert Edge %d is: %i\n", i, modbusOutSet.alertEdge[i]);
+        tc[i].setAlartEdge(0, modbusOutSet.alertEdge[i]);           // 1 = alert on falling temp, 0 = alert on rising temp
       }
     }
   }
@@ -211,35 +222,35 @@ void handleModbus() {
     memcpy(&holdingData, holdingReg, sizeof(modbus_holding_t));
     for (int i = 0; i < 8; i++) {
       if ((holdingData.type[i] <= 7) && (holdingData.type[i] != modbusHolding.type[i])) {
-        newDataToSave = true;
+        changed = true;
         Serial.printf("Thermocouple %d type changed to %d\n", i, holdingData.type[i]);
         modbusHolding.type[i] = holdingData.type[i];
         tcConfig[i].type = holdingData.type[i];
         tc[i].setType(static_cast<MCP960x_type_t>(modbusHolding.type[i])); // Set the configuration for each MCP960x
-        newDataToSave = true;
+        changed = true;
       }
-      if ((holdingData.alarmSP[i] < 1500.0) && (holdingData.alarmSP[i] > -40.0) && (holdingData.alarmSP[i] != modbusHolding.alarmSP[i])) {
-        newDataToSave = true;
+      if ((holdingData.alertSP[i] < 1500.0) && (holdingData.alertSP[i] > -40.0) && (holdingData.alertSP[i] != modbusHolding.alertSP[i])) {
+        changed = true;
         Serial.printf("Thermocouple %d SP changed to ", i);
-        Serial.println(holdingData.alarmSP[i]);
-        modbusHolding.alarmSP[i] = holdingData.alarmSP[i];
-        tcConfig[i].alertSP = holdingData.alarmSP[i];
-        tc[i].setAlarmSP(0, modbusHolding.alarmSP[i]);
-        newDataToSave = true;
+        Serial.println(holdingData.alertSP[i]);
+        modbusHolding.alertSP[i] = holdingData.alertSP[i];
+        tcConfig[i].alertSP = holdingData.alertSP[i];
+        tc[i].setAlertSP(0, modbusHolding.alertSP[i]);
+        changed = true;
       }
-      if (holdingData.alarmHyst[i] != modbusHolding.alarmHyst[i]) {
-        newDataToSave = true;
-        Serial.printf("Thermocouple %d Hyst changed to %d\n", i, holdingData.alarmHyst[i]);
-        modbusHolding.alarmHyst[i] = holdingData.alarmHyst[i];
-        tcConfig[i].alertHyst = holdingData.alarmHyst[i];
-        tc[i].setAlarmHyst(0, modbusHolding.alarmHyst[i]);
-        newDataToSave = true;
+      if (holdingData.alertHyst[i] != modbusHolding.alertHyst[i]) {
+        changed = true;
+        Serial.printf("Thermocouple %d Hyst changed to %d\n", i, holdingData.alertHyst[i]);
+        modbusHolding.alertHyst[i] = holdingData.alertHyst[i];
+        tcConfig[i].alertHyst = holdingData.alertHyst[i];
+        tc[i].setAlertHyst(0, modbusHolding.alertHyst[i]);
+        changed = true;
       }
       if ((holdingData.slaveID != modbusHolding.slaveID) && (holdingData.slaveID < 245) && (holdingData.slaveID > 0)) {
         modbusHolding.slaveID = holdingData.slaveID;
-        newDataToSave = true;
+        changed = true;
         Serial.printf("Modbus slave ID changed to %d\n", modbusHolding.slaveID);
-        bus.begin(modbusHolding.slaveID, 115200);
+        bus.begin(modbusHolding.slaveID, 500000);
         modbusInitialised = true;
         if (waitingForModbusConfig) {
           waitingForModbusConfig = false;
@@ -248,7 +259,10 @@ void handleModbus() {
       }        
     }
   }
-  if (newDataToSave) newDataTime = millis();
+  if (changed) {
+    newDataTime = millis();
+    newDataToSave = true;
+  }
   leds.setPixelColor(1, LED_OFF);
   leds.show();
 }
@@ -272,7 +286,7 @@ void handleAddrBtn() {
     }
     if (addrBtnPressed && ((millis() - addrBtnTime) < 2000)) return;
     waitingForModbusConfig = true;
-    bus.begin(245, 115200); // Set Modbus address to 245
+    bus.begin(245, 500000); // Set Modbus address to 245
     leds.setPixelColor(1, LED_UNCONFIGURED);
     leds.show();
     Serial.println("Modbus address set to 245, waiting for configuration.");
@@ -289,9 +303,6 @@ void saveHandler() {
 }
 
 void setup() {
-  //for(int i = 0; i < 8; i++) digitalWrite(enablePin[i], HIGH);
-  PORTA.OUTSET = 0xFF;
-  PORTA.DIRSET = 0xFF;
   Serial.pins(PIN_GPIO_0_TX, PIN_GPIO_1_RX); // Set RX and TX pins for Serial communication
   Serial.begin(115200);
   Serial.println("Testing AVR64DD32...");

@@ -47,6 +47,15 @@ void manageTerminal(void)
           statusLocked = false;
         }
       }
+      else if (strcmp(serialString, "assign") == 0) {
+        log(LOG_INFO, false, "Attempting to assign modbus address on bus 1\n");
+        uint8_t address = assign_address(&modbusConfig[0]);
+        if (address) {
+          log(LOG_INFO, false, "Assigned address %d on bus 1\n", address);
+        } else {
+          log(LOG_ERROR, false, "Failed to assign address on bus 1\n");
+        }
+      }
       else {
         log(LOG_INFO, false, "Unknown command: %s\n", serialString);
         log(LOG_INFO, false, "Available commands: ip (print IP address), sd (print SD card info), status, reboot\n");

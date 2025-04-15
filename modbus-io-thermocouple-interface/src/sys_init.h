@@ -74,17 +74,24 @@ struct tc_config_t {
 } tcConfig[8];  // Struct for EEPROM storage of thermocouple config data
 
 // Modbus data structures
+struct modbus_coil_t {      // FC01/05/15
+    bool alertEnable[8];    // 0-7
+    bool outputEnable[8];   // 8-15
+    bool alertLatch[8];     // 16-23
+    bool alertEdge[8];      // 24-31
+} modbusOutSet;
+
 struct modbus_discrete_t {  // FC02
     bool outputState[8];    // 0-7
-    bool alarmState[8];     // 8-15
+    bool alertState[8];     // 8-15
     bool openCircuit[8];    // 16-23
     bool shortCircuit[8];   // 24-31
 } modbusFlag;
 
-struct modbus_holding_t {   // FC03
+struct modbus_holding_t {   // FC03/06/16
     uint16_t type[8];       // 0-7
-    float alarmSP[8];       // 8-23
-    uint16_t alarmHyst[8];  // 24-31
+    float alertSP[8];       // 8-23
+    uint16_t alertHyst[8];  // 24-31
     uint16_t slaveID = 245; // 32
     uint32_t I2Cerrors = 0; // 33-34
 } modbusHolding;
@@ -94,13 +101,6 @@ struct modbus_input_t {     // FC04
     float coldJunction[8];  // 16-31
     float deltaJunction[8]; // 32-47
 } modbusInput;
-
-struct modbus_coil_t {      // FC05
-    bool alarmEnable[8];    // 0-7
-    bool outputEnable[8];   // 8-15
-    bool alarmLatch[8];     // 16-23
-    bool alarmEdge[8];      // 24-31
-} modbusOutSet;
 
 bool coil[32];
 bool inputDiscrete[32];

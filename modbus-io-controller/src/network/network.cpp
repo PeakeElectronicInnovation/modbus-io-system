@@ -214,8 +214,6 @@ void saveNetworkConfig()
   
   // Close file
   configFile.close();
-  // Don't end LittleFS here as it will prevent serving web files
-  // LittleFS.end();
 }
 
 bool applyNetworkConfig()

@@ -74,6 +74,8 @@
                 "PLATFORMIO=60118",
                 "ARDUINO_AVR_AVR64DD32",
                 "ARDUINO_avrdd",
+                "SERIAL_RX_BUFFER_SIZE=128",
+                "SERIAL_TX_BUFFER_SIZE=128",
                 "F_CPU=24000000L",
                 "ARDUINO_ARCH_MEGAAVR",
                 "ARDUINO=10808",
