@@ -90,7 +90,7 @@ struct modbus_discrete_t {  // FC02
 
 struct modbus_holding_t {   // FC03/06/16
     uint16_t slaveID = 245; // 0
-    uint16_t boardType = 0; // 1
+    uint16_t boardType = 2; // 1 (0x0002 = Thermocouple IO board ID)
     char boardName[14];     // 2-8
     uint16_t status = 0;    // 9
     uint16_t type[8];       // 10-17
