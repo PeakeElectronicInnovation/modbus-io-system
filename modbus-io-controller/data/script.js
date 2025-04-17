@@ -908,3 +908,455 @@ document.addEventListener('DOMContentLoaded', () => {
         initFileManager();
     }
 });
+
+// Board Configuration
+let boardConfigurations = [];
+let editingBoardIndex = null;
+
+// Initialize board configuration when switching to the tab
+document.addEventListener('DOMContentLoaded', () => {
+    // Try to load saved configurations from localStorage
+    const savedConfigs = localStorage.getItem('boardConfigurations');
+    if (savedConfigs) {
+        try {
+            boardConfigurations = JSON.parse(savedConfigs);
+        } catch (error) {
+            console.error('Error parsing saved configurations:', error);
+        }
+    }
+
+    // Add tab switching behavior for Board Configuration tab
+    const boardConfigTab = document.querySelector('a[data-page="board-config"]');
+    if (boardConfigTab) {
+        boardConfigTab.addEventListener('click', () => {
+            loadBoardConfigurations();
+        });
+    }
+
+    // Add board button click handler
+    const addBoardBtn = document.getElementById('addBoardBtn');
+    if (addBoardBtn) {
+        addBoardBtn.addEventListener('click', () => {
+            showBoardConfigForm();
+        });
+    }
+
+    // Board type change handler
+    const boardTypeSelect = document.getElementById('boardType');
+    if (boardTypeSelect) {
+        boardTypeSelect.addEventListener('change', () => {
+            showBoardTypeSettings(boardTypeSelect.value);
+        });
+    }
+
+    // Cancel button click handler
+    const cancelBoardConfig = document.getElementById('cancelBoardConfig');
+    if (cancelBoardConfig) {
+        cancelBoardConfig.addEventListener('click', () => {
+            hideBoardConfigForm();
+        });
+    }
+
+    // Save button click handler
+    const saveBoardConfig = document.getElementById('saveBoardConfig');
+    if (saveBoardConfig) {
+        saveBoardConfig.addEventListener('click', () => {
+            saveBoardConfiguration();
+        });
+    }
+});
+
+// Load board configurations from backend
+async function loadBoardConfigurations() {
+    try {
+        // This will be replaced with an actual API call when backend is implemented
+        // For now, just use the local boardConfigurations array
+        renderBoardsList();
+    } catch (error) {
+        console.error('Error loading board configurations:', error);
+        showToast('error', 'Error', 'Failed to load board configurations');
+    }
+}
+
+// Render the list of configured boards
+function renderBoardsList() {
+    const boardsList = document.getElementById('boardsList');
+    const noBoards = document.getElementById('noBoards');
+    
+    if (boardConfigurations.length === 0) {
+        if (noBoards) {
+            noBoards.style.display = 'block';
+        }
+        if (boardsList) {
+            boardsList.innerHTML = '';
+        }
+        return;
+    }
+
+    if (noBoards) {
+        noBoards.style.display = 'none';
+    }
+
+    if (boardsList) {
+        boardsList.innerHTML = '';
+        
+        boardConfigurations.forEach((board, index) => {
+            const boardItem = document.createElement('div');
+            boardItem.className = 'board-item';
+            
+            // Get readable board type name
+            let boardTypeName = 'Unknown';
+            switch (board.type) {
+                case 'THERMOCOUPLE_IO':
+                    boardTypeName = 'Thermocouple IO';
+                    break;
+                // Add more board types as they're supported
+            }
+            
+            boardItem.innerHTML = `
+                <div class="board-info">
+                    <span class="board-type">${boardTypeName}</span>
+                    <span class="board-details">ID: ${board.slaveID}, Port: ${parseInt(board.modbusPort) + 1}, Index: ${board.boardIndex}</span>
+                </div>
+                <div class="board-actions">
+                    <button class="btn-edit" data-index="${index}">Edit</button>
+                    <button class="btn-delete" data-index="${index}">Delete</button>
+                </div>
+            `;
+            
+            boardsList.appendChild(boardItem);
+        });
+        
+        // Add event listeners for edit and delete buttons
+        document.querySelectorAll('.btn-edit').forEach(button => {
+            button.addEventListener('click', (e) => {
+                const index = parseInt(e.target.dataset.index);
+                editBoard(index);
+            });
+        });
+        
+        document.querySelectorAll('.btn-delete').forEach(button => {
+            button.addEventListener('click', (e) => {
+                const index = parseInt(e.target.dataset.index);
+                deleteBoard(index);
+            });
+        });
+    }
+}
+
+// Show board configuration form
+function showBoardConfigForm(editIndex = null) {
+    const boardConfigForm = document.getElementById('boardConfigForm');
+    const formTitle = document.getElementById('formTitle');
+    
+    // Populate board index dropdown
+    populateBoardIndexDropdown();
+    
+    if (editIndex !== null) {
+        // Edit existing board
+        editingBoardIndex = editIndex;
+        const board = boardConfigurations[editIndex];
+        
+        if (formTitle) {
+            formTitle.textContent = 'Edit Expansion Board';
+        }
+        
+        // Fill form with board data
+        document.getElementById('boardType').value = board.type;
+        document.getElementById('boardIndex').value = board.boardIndex;
+        document.getElementById('slaveID').value = board.slaveID;
+        document.getElementById('modbusPort').value = board.modbusPort;
+        
+        // Show board type specific settings
+        showBoardTypeSettings(board.type);
+        
+        // Fill board type specific settings
+        switch (board.type) {
+            case 'THERMOCOUPLE_IO':
+                document.getElementById('pollTime').value = board.pollTime;
+                
+                // Fill channel settings
+                board.channels.forEach((channel, index) => {
+                    document.getElementById(`alertEnable_${index}`).checked = channel.alertEnable;
+                    document.getElementById(`outputEnable_${index}`).checked = channel.outputEnable;
+                    document.getElementById(`alertLatch_${index}`).checked = channel.alertLatch;
+                    document.getElementById(`alertEdge_${index}`).checked = channel.alertEdge;
+                    document.getElementById(`tcType_${index}`).value = channel.tcType;
+                    document.getElementById(`alertSetpoint_${index}`).value = channel.alertSetpoint;
+                    document.getElementById(`alertHysteresis_${index}`).value = channel.alertHysteresis;
+                });
+                break;
+            // Add more board types as they're supported
+        }
+    } else {
+        // Add new board
+        editingBoardIndex = null;
+        
+        if (formTitle) {
+            formTitle.textContent = 'Add New Expansion Board';
+        }
+        
+        // Reset form
+        const boardTypeSelect = document.getElementById('boardType');
+        if (boardTypeSelect) {
+            boardTypeSelect.value = 'THERMOCOUPLE_IO';
+        }
+        
+        // Show default board type settings
+        showBoardTypeSettings('THERMOCOUPLE_IO');
+    }
+    
+    if (boardConfigForm) {
+        boardConfigForm.style.display = 'block';
+    }
+}
+
+// Hide board configuration form
+function hideBoardConfigForm() {
+    const boardConfigForm = document.getElementById('boardConfigForm');
+    
+    if (boardConfigForm) {
+        boardConfigForm.style.display = 'none';
+    }
+    
+    // Reset form state
+    editingBoardIndex = null;
+}
+
+// Show settings specific to the selected board type
+function showBoardTypeSettings(boardType) {
+    // Hide all board type settings
+    document.querySelectorAll('.board-type-settings').forEach(settings => {
+        settings.style.display = 'none';
+    });
+    
+    // Show selected board type settings
+    switch (boardType) {
+        case 'THERMOCOUPLE_IO':
+            const thermocoupleSettings = document.getElementById('thermocoupleSettings');
+            if (thermocoupleSettings) {
+                thermocoupleSettings.style.display = 'block';
+                setupThermocoupleChannelTabs();
+            }
+            break;
+        // Add more board types as they're supported
+    }
+}
+
+// Set up channel tabs for thermocouple IO board
+function setupThermocoupleChannelTabs() {
+    const tabHeaders = document.querySelector('.channel-tab-headers');
+    const tabContent = document.querySelector('.channel-tab-content');
+    
+    if (!tabHeaders || !tabContent) return;
+    
+    // Clear existing content
+    tabHeaders.innerHTML = '';
+    tabContent.innerHTML = '';
+    
+    // Create tabs and content for 8 channels
+    for (let i = 0; i < 8; i++) {
+        // Create tab header
+        const tabHeader = document.createElement('div');
+        tabHeader.className = i === 0 ? 'channel-tab active' : 'channel-tab';
+        tabHeader.dataset.channel = i;
+        tabHeader.textContent = `Channel ${i + 1}`;
+        tabHeaders.appendChild(tabHeader);
+        
+        // Create tab content
+        const content = document.createElement('div');
+        content.className = i === 0 ? 'channel-content active' : 'channel-content';
+        content.dataset.channel = i;
+        
+        content.innerHTML = `
+            <div class="channel-form">
+                <div class="checkbox-group">
+                    <input type="checkbox" id="alertEnable_${i}" class="form-check">
+                    <label for="alertEnable_${i}">Alert Enable</label>
+                </div>
+                <div class="checkbox-group">
+                    <input type="checkbox" id="outputEnable_${i}" class="form-check">
+                    <label for="outputEnable_${i}">Output Enable</label>
+                </div>
+                <div class="checkbox-group">
+                    <input type="checkbox" id="alertLatch_${i}" class="form-check">
+                    <label for="alertLatch_${i}">Alert Latch</label>
+                </div>
+                <div class="checkbox-group">
+                    <input type="checkbox" id="alertEdge_${i}" class="form-check">
+                    <label for="alertEdge_${i}">Alert Edge</label>
+                </div>
+                <div class="form-group">
+                    <label for="tcType_${i}">Thermocouple Type:</label>
+                    <select id="tcType_${i}" class="form-control">
+                        <option value="0">Type K</option>
+                        <option value="1">Type J</option>
+                        <option value="2">Type T</option>
+                        <option value="3">Type N</option>
+                        <option value="4">Type S</option>
+                        <option value="5">Type E</option>
+                        <option value="6">Type B</option>
+                        <option value="7">Type R</option>
+                    </select>
+                </div>
+                <div class="form-group">
+                    <label for="alertSetpoint_${i}">Alert Setpoint:</label>
+                    <input type="number" id="alertSetpoint_${i}" class="form-control" step="0.1" value="0">
+                </div>
+                <div class="form-group">
+                    <label for="alertHysteresis_${i}">Alert Hysteresis:</label>
+                    <input type="number" id="alertHysteresis_${i}" class="form-control" min="0" max="255" step="1" value="0">
+                </div>
+            </div>
+        `;
+        
+        tabContent.appendChild(content);
+    }
+    
+    // Add tab switching functionality
+    document.querySelectorAll('.channel-tab').forEach(tab => {
+        tab.addEventListener('click', (e) => {
+            const channelIndex = e.target.dataset.channel;
+            
+            // Update active tab
+            document.querySelectorAll('.channel-tab').forEach(t => {
+                t.classList.remove('active');
+            });
+            e.target.classList.add('active');
+            
+            // Update active content
+            document.querySelectorAll('.channel-content').forEach(c => {
+                c.classList.remove('active');
+            });
+            document.querySelector(`.channel-content[data-channel="${channelIndex}"]`).classList.add('active');
+        });
+    });
+}
+
+// Populate board index dropdown
+function populateBoardIndexDropdown() {
+    const boardIndexSelect = document.getElementById('boardIndex');
+    const boardType = document.getElementById('boardType').value;
+    
+    if (!boardIndexSelect) return;
+    
+    // Clear existing options
+    boardIndexSelect.innerHTML = '';
+    
+    // Get used indices for this board type
+    const usedIndices = boardConfigurations
+        .filter(board => board.type === boardType && (editingBoardIndex === null || boardConfigurations.indexOf(board) !== editingBoardIndex))
+        .map(board => parseInt(board.boardIndex));
+    
+    // Add options for all available indices (0-15)
+    const maxIndices = 16;
+    for (let i = 0; i < maxIndices; i++) {
+        if (!usedIndices.includes(i)) {
+            const option = document.createElement('option');
+            option.value = i;
+            option.textContent = i;
+            boardIndexSelect.appendChild(option);
+        }
+    }
+    
+    // If no options were added, board indices are exhausted
+    if (boardIndexSelect.options.length === 0) {
+        const option = document.createElement('option');
+        option.value = '';
+        option.textContent = 'No available indices';
+        option.disabled = true;
+        boardIndexSelect.appendChild(option);
+        boardIndexSelect.value = '';
+    }
+}
+
+// Save board configuration
+function saveBoardConfiguration() {
+    // Get form values
+    const boardType = document.getElementById('boardType').value;
+    const boardIndex = document.getElementById('boardIndex').value;
+    const slaveID = document.getElementById('slaveID').value;
+    const modbusPort = document.getElementById('modbusPort').value;
+    
+    // Validate required fields
+    if (!boardType || !boardIndex || !slaveID || !modbusPort) {
+        showToast('error', 'Validation Error', 'Please fill in all required fields');
+        return;
+    }
+    
+    // Create board configuration object
+    const boardConfig = {
+        type: boardType,
+        boardIndex: boardIndex,
+        slaveID: slaveID,
+        modbusPort: modbusPort
+    };
+    
+    // Add board type specific settings
+    switch (boardType) {
+        case 'THERMOCOUPLE_IO':
+            boardConfig.pollTime = document.getElementById('pollTime').value;
+            boardConfig.channels = [];
+            
+            // Add channel settings
+            for (let i = 0; i < 8; i++) {
+                boardConfig.channels.push({
+                    alertEnable: document.getElementById(`alertEnable_${i}`).checked,
+                    outputEnable: document.getElementById(`outputEnable_${i}`).checked,
+                    alertLatch: document.getElementById(`alertLatch_${i}`).checked,
+                    alertEdge: document.getElementById(`alertEdge_${i}`).checked,
+                    tcType: document.getElementById(`tcType_${i}`).value,
+                    alertSetpoint: parseFloat(document.getElementById(`alertSetpoint_${i}`).value),
+                    alertHysteresis: parseInt(document.getElementById(`alertHysteresis_${i}`).value)
+                });
+            }
+            break;
+        // Add more board types as they're supported
+    }
+    
+    // Save or update board configuration
+    if (editingBoardIndex !== null) {
+        // Update existing board
+        boardConfigurations[editingBoardIndex] = boardConfig;
+        showToast('success', 'Success', 'Board configuration updated');
+    } else {
+        // Add new board
+        boardConfigurations.push(boardConfig);
+        showToast('success', 'Success', 'New board added');
+    }
+    
+    // Save to backend (will be implemented later)
+    saveBoardConfigurationsToBackend();
+    
+    // Hide form and refresh list
+    hideBoardConfigForm();
+    renderBoardsList();
+}
+
+// Edit board configuration
+function editBoard(index) {
+    showBoardConfigForm(index);
+}
+
+// Delete board configuration
+function deleteBoard(index) {
+    if (confirm('Are you sure you want to delete this board configuration?')) {
+        boardConfigurations.splice(index, 1);
+        renderBoardsList();
+        saveBoardConfigurationsToBackend();
+        showToast('success', 'Success', 'Board configuration deleted');
+    }
+}
+
+// Save board configurations to backend (placeholder for now)
+async function saveBoardConfigurationsToBackend() {
+    try {
+        // This will be replaced with an actual API call when backend is implemented
+        console.log('Board configurations saved:', boardConfigurations);
+        // For now, just store in localStorage for persistence
+        localStorage.setItem('boardConfigurations', JSON.stringify(boardConfigurations));
+    } catch (error) {
+        console.error('Error saving board configurations:', error);
+        showToast('error', 'Error', 'Failed to save board configurations');
+    }
+}

@@ -89,11 +89,13 @@ struct modbus_discrete_t {  // FC02
 } modbusFlag;
 
 struct modbus_holding_t {   // FC03/06/16
-    uint16_t type[8];       // 0-7
-    float alertSP[8];       // 8-23
-    uint16_t alertHyst[8];  // 24-31
-    uint16_t slaveID = 245; // 32
-    uint32_t I2Cerrors = 0; // 33-34
+    uint16_t slaveID = 245; // 0
+    uint16_t boardType = 0; // 1
+    char boardName[14];     // 2-8
+    uint16_t status = 0;    // 9
+    uint16_t type[8];       // 10-17
+    float alertSP[8];       // 18-33
+    uint16_t alertHyst[8];  // 34-41
 } modbusHolding;
 
 struct modbus_input_t {     // FC04

@@ -12,8 +12,7 @@
         <nav>
             <ul>
                 <li><a href="#" class="active" data-page="dashboard">Dashboard</a></li>
-                <li><a href="#" data-page="bus-config">Bus Config</a></li>
-                <li><a href="#" data-page="board-config">Board Config</a></li>
+                <li><a href="#" data-page="board-config">Exp. Board Config</a></li>
                 <li><a href="#" data-page="filemanager">File Manager</a></li>
                 <li><a href="#" data-page="system">System Status</a></li>
                 <li><a href="#" data-page="settings">System Settings</a></li>
@@ -45,12 +44,77 @@
                     <h1>Modbus IO System Dashboard</h1>
                 </div>
 
-                <div id="bus-config" class="page">
-                    <h1>RS485 Bus Configuration</h1>
-                </div>
-
                 <div id="board-config" class="page">
                     <h1>Expansion Board Configuration</h1>
+                    <div class="board-config-container">
+                        <div class="configured-boards">
+                            <h2>Configured Boards</h2>
+                            <div id="boardsList" class="boards-list">
+                                <!-- Boards will be displayed here -->
+                                <p id="noBoards" class="no-boards-message">No expansion boards configured.</p>
+                            </div>
+                            <button id="addBoardBtn" class="btn btn-primary">Add New Expansion Board</button>
+                        </div>
+
+                        <!-- Board configuration form (hidden by default) -->
+                        <div id="boardConfigForm" class="board-config-form" style="display: none;">
+                            <h2 id="formTitle">Add New Expansion Board</h2>
+                            <div class="form-section">
+                                <div class="form-group">
+                                    <label for="boardType">Board Type:</label>
+                                    <select id="boardType" class="form-control">
+                                        <option value="THERMOCOUPLE_IO">Thermocouple IO</option>
+                                        <!-- More board types will be added later -->
+                                    </select>
+                                </div>
+                                <div class="form-group">
+                                    <label for="boardIndex">Board Index:</label>
+                                    <select id="boardIndex" class="form-control">
+                                        <!-- Options will be dynamically populated -->
+                                    </select>
+                                </div>
+                                <div class="form-group">
+                                    <label for="slaveID">Modbus Slave ID:</label>
+                                    <input type="number" id="slaveID" class="form-control" min="1" max="247" value="1">
+                                </div>
+                                <div class="form-group">
+                                    <label for="modbusPort">Modbus Port:</label>
+                                    <select id="modbusPort" class="form-control">
+                                        <option value="0">Port 1</option>
+                                        <option value="1">Port 2</option>
+                                    </select>
+                                </div>
+                            </div>
+
+                            <!-- Thermocouple IO board specific settings -->
+                            <div id="thermocoupleSettings" class="board-type-settings">
+                                <div class="form-section">
+                                    <h3>Global Settings</h3>
+                                    <div class="form-group">
+                                        <label for="pollTime">Poll Time (ms):</label>
+                                        <input type="number" id="pollTime" class="form-control" min="100" max="10000" value="1000">
+                                    </div>
+                                </div>
+
+                                <div class="form-section">
+                                    <h3>Channel Configuration</h3>
+                                    <div class="channel-tabs">
+                                        <div class="channel-tab-headers">
+                                            <!-- Channel tabs will be created dynamically -->
+                                        </div>
+                                        <div class="channel-tab-content">
+                                            <!-- Channel content will be created dynamically -->
+                                        </div>
+                                    </div>
+                                </div>
+                            </div>
+
+                            <div class="form-actions">
+                                <button id="cancelBoardConfig" class="btn btn-secondary">Cancel</button>
+                                <button id="saveBoardConfig" class="btn btn-primary">Save Board Configuration</button>
+                            </div>
+                        </div>
+                    </div>
                 </div>
 
                 <div id="settings" class="page">
