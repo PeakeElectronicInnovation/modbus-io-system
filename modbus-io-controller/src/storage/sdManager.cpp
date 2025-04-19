@@ -195,12 +195,12 @@ bool writeLog(const char *message) {
     if (logFileSize > SD_LOG_MAX_SIZE) {
         // Rename the existing log file and create a new one
         char fNameBuf[50];
-        snprintf(fNameBuf, sizeof(fNameBuf), "/logs/system-log-archive-%04d-%02d-%02d.txt", now.year, now.month, now.day);
+        snprintf(fNameBuf, sizeof(fNameBuf), "/logs/system-log-archive-%04d-%02d-%02d-file-", now.year, now.month, now.day);
         
         if (!sd.exists(fNameBuf)) {
             for (int i = 0; i < 100; i++) {
                 char tempBuf[50];
-                snprintf(tempBuf, sizeof(tempBuf), "%s-%d", fNameBuf, i);
+                snprintf(tempBuf, sizeof(tempBuf), "%s-%d.txt", fNameBuf, i);
                 if (!sd.exists(tempBuf)) {
                         strcpy(fNameBuf, tempBuf);
                         break;

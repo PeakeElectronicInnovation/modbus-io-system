@@ -6,6 +6,7 @@
     <link rel="icon" type="image/x-icon" href="favicon.ico">
     <title>Modbus IO System</title>
     <link rel="stylesheet" href="style.css">
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
 </head>
 <body>
     <div class="container">
@@ -48,12 +49,14 @@
                     <h1>Expansion Board Configuration</h1>
                     <div class="board-config-container">
                         <div class="configured-boards">
-                            <h2>Configured Boards</h2>
+                            <div class="boards-header">
+                                <h2>Configured Boards</h2>
+                                <button id="addBoardBtn" class="btn btn-primary"><i class="fas fa-plus"></i> Add New Expansion Board</button>
+                            </div>
                             <div id="boardsList" class="boards-list">
                                 <!-- Boards will be displayed here -->
                                 <p id="noBoards" class="no-boards-message">No expansion boards configured.</p>
                             </div>
-                            <button id="addBoardBtn" class="btn btn-primary">Add New Expansion Board</button>
                         </div>
 
                         <!-- Board configuration form (hidden by default) -->
@@ -68,14 +71,9 @@
                                     </select>
                                 </div>
                                 <div class="form-group">
-                                    <label for="boardIndex">Board Index:</label>
-                                    <select id="boardIndex" class="form-control">
-                                        <!-- Options will be dynamically populated -->
-                                    </select>
-                                </div>
-                                <div class="form-group">
-                                    <label for="slaveID">Modbus Slave ID:</label>
-                                    <input type="number" id="slaveID" class="form-control" min="1" max="247" value="1">
+                                    <label for="boardName">Board Name:</label>
+                                    <input type="text" id="boardName" class="form-control" maxlength="13" placeholder="Enter board name">
+                                    <small class="helper-text">Maximum 13 characters</small>
                                 </div>
                                 <div class="form-group">
                                     <label for="modbusPort">Modbus Port:</label>
@@ -110,8 +108,8 @@
                             </div>
 
                             <div class="form-actions">
-                                <button id="cancelBoardConfig" class="btn btn-secondary">Cancel</button>
-                                <button id="saveBoardConfig" class="btn btn-primary">Save Board Configuration</button>
+                                <button id="cancelBoardConfig" class="btn btn-secondary"><i class="fas fa-times"></i> Cancel</button>
+                                <button id="saveBoardConfig" class="btn btn-primary"><i class="fas fa-save"></i> Save Board Configuration</button>
                             </div>
                         </div>
                     </div>

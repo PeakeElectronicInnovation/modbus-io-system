@@ -1,4 +1,5 @@
 #include "io_core.h"
+#include "board_config.h"
 #include "io_objects.h"
 
 // Object definitions
@@ -22,25 +23,91 @@ void init_io_core(void) {
     bus1.begin(500000);
     bus2.begin(500000);
 
-    // Test thermocouple board
-    thermocoupleIO_index.tcIO[0].bus = &bus1;
-    thermocoupleIO_index.tcIO[0].slaveID = 1;
-    thermocoupleIO_index.tcIO[0].status = 0;
-    thermocoupleIO_index.tcIO[0].lastUpdate = millis();
-    thermocoupleIO_index.tcIO[0].pollTime = 1000;
-    thermocoupleIO_index.tcIO[0].reg.slaveID = 1;
-    thermocoupleIO_index.tcIO[0].reg.alertEnable[0] = true;
-    thermocoupleIO_index.tcIO[0].reg.outputEnable[0] = true;    
-    thermocoupleIO_index.tcIO[0].reg.alertLatch[0] = false;     // Auto-clear
-    thermocoupleIO_index.tcIO[0].reg.alertEdge[0] = false;      // Alert on rising edge
-    thermocoupleIO_index.tcIO[0].reg.alertSP[0] = 100.0;
-    thermocoupleIO_index.tcIO[0].reg.alarmHyst[0] = 15;
-    thermocoupleIO_index.tcIO[0].reg.type[0] = 0;               // K type thermocouple
+    // Initialize board configuration
+    init_board_config();
 
-    deviceIndex[0].type = THERMOCOUPLE_IO;
-    deviceIndex[0].index = 0;
-    deviceIndex[0].configured = true;
-    log(LOG_INFO, false, "IO Core initialised, added thermocouple board for testing...\n");
+    // Apply saved board configurations
+    apply_board_configs();
+
+    log(LOG_INFO, false, "IO Core initialized\n");
+}
+
+// Apply board configurations from config file
+void apply_board_configs() {
+    uint8_t appliedBoards = 0;
+    uint8_t count = getBoardCount();
+
+    // Reset device index
+    memset(deviceIndex, 0, sizeof(deviceIndex));
+
+    for (uint8_t i = 0; i < count; i++) {
+        BoardConfig* board = getBoard(i);
+        if (!board) continue;
+
+        switch (board->type) {
+            case THERMOCOUPLE_IO:
+                if (apply_thermocouple_config(board)) {
+                    appliedBoards++;
+                }
+                break;
+            // Add more board types as needed
+            default:
+                log(LOG_WARNING, false, "Unknown board type %d\n", board->type);
+                break;
+        }
+    }
+
+    log(LOG_INFO, false, "Applied %d board configurations\n", appliedBoards);
+}
+
+// Apply thermocouple IO board configuration
+bool apply_thermocouple_config(BoardConfig* config) {
+    if (!config || config->type != THERMOCOUPLE_IO || config->boardIndex >= 16) {
+        return false;
+    }
+
+    // Configure the board
+    thermocoupleIO_index.tcIO[config->boardIndex].bus = (config->modbusPort == 0) ? &bus1 : &bus2;
+    thermocoupleIO_index.tcIO[config->boardIndex].slaveID = config->slaveID;
+    thermocoupleIO_index.tcIO[config->boardIndex].status = 0;
+    thermocoupleIO_index.tcIO[config->boardIndex].lastUpdate = millis();
+    thermocoupleIO_index.tcIO[config->boardIndex].pollTime = config->pollTime;
+    thermocoupleIO_index.tcIO[config->boardIndex].reg.slaveID = config->slaveID;
+
+    // Configure channels
+    for (uint8_t ch = 0; ch < 8; ch++) {
+        thermocoupleIO_index.tcIO[config->boardIndex].reg.alertEnable[ch] = config->settings.thermocoupleIO.channels[ch].alertEnable;
+        thermocoupleIO_index.tcIO[config->boardIndex].reg.outputEnable[ch] = config->settings.thermocoupleIO.channels[ch].outputEnable;
+        thermocoupleIO_index.tcIO[config->boardIndex].reg.alertLatch[ch] = config->settings.thermocoupleIO.channels[ch].alertLatch;
+        thermocoupleIO_index.tcIO[config->boardIndex].reg.alertEdge[ch] = config->settings.thermocoupleIO.channels[ch].alertEdge;
+        thermocoupleIO_index.tcIO[config->boardIndex].reg.type[ch] = config->settings.thermocoupleIO.channels[ch].tcType;
+        thermocoupleIO_index.tcIO[config->boardIndex].reg.alertSP[ch] = config->settings.thermocoupleIO.channels[ch].alertSetpoint;
+        thermocoupleIO_index.tcIO[config->boardIndex].reg.alarmHyst[ch] = config->settings.thermocoupleIO.channels[ch].alertHysteresis;
+    }
+
+    // Update device index
+    uint8_t idx = findFreeDeviceIndex();
+    if (idx < 64) {
+        deviceIndex[idx].type = THERMOCOUPLE_IO;
+        deviceIndex[idx].index = config->boardIndex;
+        deviceIndex[idx].configured = true;
+        log(LOG_INFO, false, "Added thermocouple board '%s' with ID %d at index %d\n", 
+            config->boardName, config->slaveID, config->boardIndex);
+        return true;
+    }
+
+    log(LOG_WARNING, false, "Device index is full, cannot add thermocouple board\n");
+    return false;
+}
+
+// Find a free device index slot
+uint8_t findFreeDeviceIndex() {
+    for (uint8_t i = 0; i < 64; i++) {
+        if (!deviceIndex[i].configured) {
+            return i;
+        }
+    }
+    return 255; // Error - no free slot
 }
 
 void manage_io_core(void) {
@@ -68,8 +135,10 @@ void manage_io_core(void) {
 uint8_t assign_address(modbusConfig_t *busCfg) {
     uint16_t buf[1];
     // Check for device waiting for address assignment (at address 245)
-    if (!busCfg->bus->readHoldingRegisters(245, 0, buf, 1)) return 0;
-
+    if (!busCfg->bus->readHoldingRegisters(245, 0, buf, 1)) {
+        log(LOG_ERROR, true, "No device waiting for address assignment\n");
+        return 0;
+    }
     for (uint8_t i = 1; i < 243; i++) {
         if (!busCfg->idAssigned[i]) {
             // Assign address to device
@@ -87,19 +156,23 @@ uint8_t assign_address(modbusConfig_t *busCfg) {
 }
 
 void manage_thermocouple(uint8_t index) {
+    // Check if polling time has elapsed
     if(millis() - thermocoupleIO_index.tcIO[index].lastUpdate < thermocoupleIO_index.tcIO[index].pollTime) return;
     thermocoupleIO_index.tcIO[index].lastUpdate = millis();
+
+    // Register buffers
     bool coils[32];
     bool discreteInputs[32];
-    uint16_t holdingRegisters[35];
+    uint16_t holdingRegisters[42];
     uint16_t inputRegisters[48];
+
+    // Load Coil and Holding Register buffers with current config values
     memcpy(coils, &thermocoupleIO_index.tcIO[index].reg, sizeof(coils));
-    memcpy(holdingRegisters, &thermocoupleIO_index.tcIO[index].reg.type, 64); // Careful, slaveID is padded here, copy separately
-    holdingRegisters[32] = thermocoupleIO_index.tcIO[index].slaveID;
+    memcpy(holdingRegisters, &thermocoupleIO_index.tcIO[index].reg.slaveID, sizeof(holdingRegisters));
     bool changed = false;
 
     // Check for changes to writable registers and write if changed
-    // Coils
+    // Coils ----->
     for (int i = 0; i < sizeof(coils); i++) {
         if (thermocoupleIO_index.tcIO[index].coils[i] != coils[i]) {
             thermocoupleIO_index.tcIO[index].coils[i] = coils[i];
@@ -116,8 +189,8 @@ void manage_thermocouple(uint8_t index) {
         changed = false;
     }
 
-    // Holding registers
-    for (int i = 0; i < 33; i++) {
+    // Holding registers ----->
+    for (int i = 0; i < 42; i++) {
         if (thermocoupleIO_index.tcIO[index].holdingRegisters[i] != holdingRegisters[i]) {
             thermocoupleIO_index.tcIO[index].holdingRegisters[i] = holdingRegisters[i];
             changed = true;
@@ -127,7 +200,7 @@ void manage_thermocouple(uint8_t index) {
     if (changed) {
         int retries = 0;
         while (retries < 3) {
-            if(thermocoupleIO_index.tcIO[index].bus->writeMultipleHoldingRegisters(thermocoupleIO_index.tcIO[index].slaveID, 0x0000, holdingRegisters, 33)) {
+            if(thermocoupleIO_index.tcIO[index].bus->writeMultipleHoldingRegisters(thermocoupleIO_index.tcIO[index].slaveID, 0x0000, holdingRegisters, 42)) {
                 log(LOG_DEBUG, false, "Holding registers written successfully\n");
                 break;
             } else {

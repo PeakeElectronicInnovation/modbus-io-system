@@ -40,11 +40,12 @@
 #define PIN_RESET       PIN_PF6
 #define PIN_UPDI        PIN_PF7
 
-// EEPROM defines
+// EEPROM defines (for AVR64DD32 MCU max is 256 bytes)
 #define EEPROM_VALID_ADDR     0x00
 #define EEPROM_VALID_VALUE    0xA5
-#define EEPROM_MODBUSCFG_ADDR 0x01
-#define EEPROM_CONFIG_ADDR    0x10
+#define EEPROM_MODBUSCFG_ADDR 0x01 // (2 bytes)
+#define EEPROM_BOARDNAME_ADDR 0x03 // (14 bytes)
+#define EEPROM_CONFIG_ADDR    0x20 // (8 * sizeof(tc_config_t) = 80 bytes)
 
 // Objects
 tinyNeoPixel leds = tinyNeoPixel(2, PIN_LED_DAT, NEO_GRB);
@@ -90,7 +91,7 @@ struct modbus_discrete_t {  // FC02
 
 struct modbus_holding_t {   // FC03/06/16
     uint16_t slaveID = 245; // 0
-    uint16_t boardType = 2; // 1 (0x0002 = Thermocouple IO board ID)
+    const uint16_t boardType = 2; // 1 (0x0002 = Thermocouple IO board ID)
     char boardName[14];     // 2-8
     uint16_t status = 0;    // 9
     uint16_t type[8];       // 10-17
@@ -104,10 +105,11 @@ struct modbus_input_t {     // FC04
     float deltaJunction[8]; // 32-47
 } modbusInput;
 
+// Modbus register arrays
 bool coil[32];
 bool inputDiscrete[32];
 uint16_t inputReg[48];
-uint16_t holdingReg[38];
+uint16_t holdingReg[42];
 
 int enablePin[8] = {
     PIN_EN_CH1,

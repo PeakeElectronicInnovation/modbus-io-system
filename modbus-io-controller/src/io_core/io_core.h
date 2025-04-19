@@ -1,9 +1,13 @@
 #pragma once
 
 #include "sys_init.h"
+#include "io_objects.h"
+
+// Forward declarations to avoid circular dependencies
+struct BoardConfig;
 
 // Common defines
-#define MODBUS_HOLDING_REG_SLAVE_ID 32      // TEMP ONLY!!! NEEDS TO BE STANDARDIZED TO ADDR 0x0000
+#define MODBUS_HOLDING_REG_SLAVE_ID 0
 
 // Top level structs
 struct modbusConfig_t {
@@ -20,6 +24,11 @@ extern modbusConfig_t modbusConfig[2];
 void init_io_core(void);
 void manage_io_core(void);
 uint8_t assign_address(modbusConfig_t *busCfg);
+
+// Board configuration application functions
+void apply_board_configs(void);
+bool apply_thermocouple_config(BoardConfig* config);
+uint8_t findFreeDeviceIndex(void);
 
 // Board specific handlers
 void manage_thermocouple(uint8_t index);

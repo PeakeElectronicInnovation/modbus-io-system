@@ -9,7 +9,10 @@ void __attribute__((section(".init3"))) early_init(void) {
 
 void saveConfig() {
   newDataToSave = false;
+  // Save Slave ID and board name to EEPROM
   EEPROM.put(EEPROM_MODBUSCFG_ADDR, modbusHolding.slaveID);
+  EEPROM.put(EEPROM_BOARDNAME_ADDR, modbusHolding.boardName);
+  // Save thermocouple config to EEPROM
   for(int i = 0; i < 8; i++) {
     EEPROM.put(EEPROM_CONFIG_ADDR + (i * sizeof(tc_config_t)), tcConfig[i]);
   }
@@ -35,11 +38,21 @@ void getConfig() {
   }
 
   // Load configuration from EEPROM
+  Serial.println("Loading previously saved configuration from EEPROM...");
+  // Slave ID:
   EEPROM.get(EEPROM_MODBUSCFG_ADDR, modbusHolding.slaveID);
   if (modbusHolding.slaveID < 245) {
     modbusInitialised = true;
     statusLedColour = LED_OK;
-  } else statusLedColour = LED_UNCONFIGURED;
+    Serial.printf("Modbus slave ID: %d\n", modbusHolding.slaveID);
+  } else {
+    statusLedColour = LED_UNCONFIGURED;
+    Serial.printf("Modbus unconfigured\n");
+  }
+  // Board name:
+  EEPROM.get(EEPROM_BOARDNAME_ADDR, modbusHolding.boardName);
+  Serial.printf("Board name: %s\n", modbusHolding.boardName);
+  // Thermocouple config:
   for(int i = 0; i < 8; i++) {
     EEPROM.get(EEPROM_CONFIG_ADDR + (i * sizeof(tc_config_t)), tcConfig[i]);
   }
@@ -74,14 +87,14 @@ void setupModbus() {
   pinMode(PIN_ADDR_BTN, INPUT_PULLUP);
   bus.configureCoils(coil, 32);
   bus.configureDiscreteInputs(inputDiscrete, 32);
-  bus.configureHoldingRegisters(holdingReg, 38);
+  bus.configureHoldingRegisters(holdingReg, 42);
   bus.configureInputRegisters(inputReg, 48);
   if (modbusInitialised) {
     bus.begin(modbusHolding.slaveID, 500000);
     commLedColour = LED_OK;
   } else {
     commLedColour = LED_OFF;
-    Serial.println("Modbus not configured, hold Address button and restart to configure.");
+    Serial.println("Modbus not configured, hold Address button for 3 seconds to start configuration.");
   }
 }
 
@@ -246,16 +259,23 @@ void handleModbus() {
         tc[i].setAlertHyst(0, modbusHolding.alertHyst[i]);
         changed = true;
       }
-      if ((holdingData.slaveID != modbusHolding.slaveID) && (holdingData.slaveID < 245) && (holdingData.slaveID > 0)) {
-        modbusHolding.slaveID = holdingData.slaveID;
-        changed = true;
-        Serial.printf("Modbus slave ID changed to %d\n", modbusHolding.slaveID);
-        bus.begin(modbusHolding.slaveID, 500000);
-        modbusInitialised = true;
+      if ((holdingData.slaveID != modbusHolding.slaveID) && (holdingData.slaveID > 0)) {
+        if ((holdingData.slaveID > 244) || (holdingData.slaveID < 1)) {
+          modbusHolding.slaveID = 245;
+          modbusInitialised = false;
+          statusLedColour = LED_UNCONFIGURED;
+          Serial.printf("Slave ID reset, Modbus unconfigured\n");
+        } else {
+          modbusHolding.slaveID = holdingData.slaveID;
+          Serial.printf("Modbus slave ID changed to %d\n", modbusHolding.slaveID);
+          bus.begin(modbusHolding.slaveID, 500000);
+          modbusInitialised = true;
+        }
         if (waitingForModbusConfig) {
           waitingForModbusConfig = false;
           Serial.println("Modbus configuration complete!");
         }
+        changed = true;
       }        
     }
   }
