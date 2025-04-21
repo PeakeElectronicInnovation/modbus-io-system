@@ -6,11 +6,11 @@
 BoardConfig boardConfigs[MAX_BOARDS];
 uint8_t boardCount = 0;
 
-// Initialize board configuration
+// Initialise board configuration
 void init_board_config(void) {
     // Load existing configuration from LittleFS
     if (!loadBoardConfig()) {
-        // If configuration doesn't exist or is invalid, initialize with defaults
+        // If configuration doesn't exist or is invalid, initialise with defaults
         log(LOG_INFO, false, "Invalid board configuration, starting with empty configuration\n");
         boardCount = 0;
         saveBoardConfig();
@@ -86,6 +86,7 @@ bool loadBoardConfig() {
         boardConfigs[index].slaveID = board["slave_id"] | 0;
         boardConfigs[index].modbusPort = board["modbus_port"] | 0;
         boardConfigs[index].pollTime = board["poll_time"] | 1000;
+        boardConfigs[index].initialised = board["initialised"] | false;
         
         // Load board-specific settings based on type
         if (boardConfigs[index].type == THERMOCOUPLE_IO) {
@@ -146,6 +147,7 @@ bool saveBoardConfig() {
         board["slave_id"] = boardConfigs[i].slaveID;
         board["modbus_port"] = boardConfigs[i].modbusPort;
         board["poll_time"] = boardConfigs[i].pollTime;
+        board["initialised"] = boardConfigs[i].initialised;
         
         // Add board-specific settings based on type
         if (boardConfigs[i].type == THERMOCOUPLE_IO) {
@@ -196,6 +198,7 @@ bool saveBoardConfig() {
 
 // Set up API endpoints for board configuration
 void setupBoardConfigAPI() {
+    log(LOG_INFO, true, "Setting up board configuration API\n");
     // Global OPTIONS handler for CORS preflight requests
     server.on("/api/boards", HTTP_OPTIONS, []() {
         server.sendHeader("Access-Control-Allow-Origin", "*");
@@ -227,6 +230,20 @@ void setupBoardConfigAPI() {
         server.sendHeader("Access-Control-Allow-Headers", "Content-Type");
         server.send(200);
     });
+    
+    // Register the initialise endpoint
+    log(LOG_INFO, true, "Registering /api/boards/initialise endpoint\n");
+    
+    // Also handle OPTIONS for the /api/boards/initialise endpoint
+    server.on("/api/boards/initialise", HTTP_OPTIONS, []() {
+        server.sendHeader("Access-Control-Allow-Origin", "*");
+        server.sendHeader("Access-Control-Allow-Methods", "GET, OPTIONS");
+        server.sendHeader("Access-Control-Allow-Headers", "Content-Type");
+        server.send(200);
+    });
+    
+    server.on("/api/boards/initialise", HTTP_GET, handleInitialiseBoard);
+    log(LOG_INFO, true, "Board API setup complete\n");
 }
 
 void handleGetBoardConfig() {
@@ -234,10 +251,7 @@ void handleGetBoardConfig() {
     server.sendHeader("Access-Control-Allow-Origin", "*");
     server.sendHeader("Access-Control-Allow-Methods", "GET");
     server.sendHeader("Access-Control-Allow-Headers", "Content-Type");
-    
-    // Print board count for debugging
-    log(LOG_INFO, false, "Serving board configurations, count: %d\n", boardCount);
-    
+
     // If there are no boards, return an empty array
     if (boardCount == 0) {
         log(LOG_INFO, true, "No boards configured, returning empty array\n");
@@ -262,6 +276,7 @@ void handleGetBoardConfig() {
         board["slave_id"] = boardConfigs[i].slaveID;
         board["modbus_port"] = boardConfigs[i].modbusPort;
         board["poll_time"] = boardConfigs[i].pollTime;
+        board["initialised"] = boardConfigs[i].initialised; // Add initialization status
         
         // Add board-specific settings based on type
         if (boardConfigs[i].type == THERMOCOUPLE_IO) {
@@ -285,7 +300,7 @@ void handleGetBoardConfig() {
     // Debug the response
     String debugResponse;
     serializeJson(doc, debugResponse);
-    log(LOG_INFO, false, "API Response: %s\n", debugResponse.c_str());
+    //log(LOG_INFO, false, "API Response: %s\n", debugResponse.c_str());
     
     // Send response
     String response;
@@ -347,12 +362,14 @@ void handleAddBoard() {
         name, type, modbusPort, pollTime);
     
     // Create new board config at the end of the array
-    strlcpy(boardConfigs[boardCount].boardName, name, MAX_BOARD_NAME_LENGTH);
-    boardConfigs[boardCount].type = (deviceType_t)type;
-    boardConfigs[boardCount].boardIndex = boardCount; // Use boardCount as index
-    boardConfigs[boardCount].slaveID = 1; // Default slave ID
-    boardConfigs[boardCount].modbusPort = modbusPort;
-    boardConfigs[boardCount].pollTime = pollTime;
+    BoardConfig newBoard;
+    strlcpy(newBoard.boardName, name, MAX_BOARD_NAME_LENGTH);
+    newBoard.type = (deviceType_t)type;
+    newBoard.boardIndex = boardCount; // Use boardCount as index
+    newBoard.slaveID = 1; // Default slave ID
+    newBoard.modbusPort = modbusPort;
+    newBoard.pollTime = pollTime;
+    newBoard.initialised = false; // New boards are not initialised by default
     
     // Handle board type specific settings
     if (type == THERMOCOUPLE_IO) {
@@ -362,56 +379,51 @@ void handleAddBoard() {
             for (JsonObject channel : channels) {
                 if (channelIndex >= 8) break;
                 
-                boardConfigs[boardCount].settings.thermocoupleIO.channels[channelIndex].alertEnable = channel["alert_enable"] | false;
-                boardConfigs[boardCount].settings.thermocoupleIO.channels[channelIndex].outputEnable = channel["output_enable"] | false;
-                boardConfigs[boardCount].settings.thermocoupleIO.channels[channelIndex].alertLatch = channel["alert_latch"] | false;
-                boardConfigs[boardCount].settings.thermocoupleIO.channels[channelIndex].alertEdge = channel["alert_edge"] | false;
-                boardConfigs[boardCount].settings.thermocoupleIO.channels[channelIndex].tcType = channel["tc_type"] | 0;
-                boardConfigs[boardCount].settings.thermocoupleIO.channels[channelIndex].alertSetpoint = channel["alert_setpoint"] | 0.0f;
-                boardConfigs[boardCount].settings.thermocoupleIO.channels[channelIndex].alertHysteresis = channel["alert_hysteresis"] | 0;
+                newBoard.settings.thermocoupleIO.channels[channelIndex].alertEnable = channel["alert_enable"] | false;
+                newBoard.settings.thermocoupleIO.channels[channelIndex].outputEnable = channel["output_enable"] | false;
+                newBoard.settings.thermocoupleIO.channels[channelIndex].alertLatch = channel["alert_latch"] | false;
+                newBoard.settings.thermocoupleIO.channels[channelIndex].alertEdge = channel["alert_edge"] | false;
+                newBoard.settings.thermocoupleIO.channels[channelIndex].tcType = channel["tc_type"] | 0;
+                newBoard.settings.thermocoupleIO.channels[channelIndex].alertSetpoint = channel["alert_setpoint"] | 0.0f;
+                newBoard.settings.thermocoupleIO.channels[channelIndex].alertHysteresis = channel["alert_hysteresis"] | 0;
                 
                 channelIndex++;
             }
         } else {
             log(LOG_WARNING, true, "No channels array found for THERMOCOUPLE_IO board\n");
-            // Initialize with default values
+            // Initialise with default values
             for (int j = 0; j < 8; j++) {
-                boardConfigs[boardCount].settings.thermocoupleIO.channels[j].alertEnable = false;
-                boardConfigs[boardCount].settings.thermocoupleIO.channels[j].outputEnable = false;
-                boardConfigs[boardCount].settings.thermocoupleIO.channels[j].alertLatch = false;
-                boardConfigs[boardCount].settings.thermocoupleIO.channels[j].alertEdge = false;
-                boardConfigs[boardCount].settings.thermocoupleIO.channels[j].tcType = 0;
-                boardConfigs[boardCount].settings.thermocoupleIO.channels[j].alertSetpoint = 0.0f;
-                boardConfigs[boardCount].settings.thermocoupleIO.channels[j].alertHysteresis = 0;
+                newBoard.settings.thermocoupleIO.channels[j].alertEnable = false;
+                newBoard.settings.thermocoupleIO.channels[j].outputEnable = false;
+                newBoard.settings.thermocoupleIO.channels[j].alertLatch = false;
+                newBoard.settings.thermocoupleIO.channels[j].alertEdge = false;
+                newBoard.settings.thermocoupleIO.channels[j].tcType = 0;
+                newBoard.settings.thermocoupleIO.channels[j].alertSetpoint = 0.0f;
+                newBoard.settings.thermocoupleIO.channels[j].alertHysteresis = 0;
             }
         }
     }
     
-    // Increment board count after successfully adding the board
-    boardCount++;
-    
-    // Save configuration to LittleFS
-    if (!saveBoardConfig()) {
-        log(LOG_WARNING, true, "Failed to save board configuration\n");
+    // Add the new board
+    if (addBoard(newBoard)) {
+        // Apply the board configuration immediately
+        apply_board_configs();
+        log(LOG_INFO, true, "Applied board configurations\n");
+        
+        // Create response with the new board
+        DynamicJsonDocument responseDoc(1024);
+        responseDoc["success"] = true;
+        responseDoc["message"] = "Board added successfully";
+        responseDoc["id"] = boardCount - 1; // ID of the newly added board
+        
+        String response;
+        serializeJson(responseDoc, response);
+        server.send(200, "application/json", response);
+        
+        log(LOG_INFO, true, "Board added successfully, new count: %d\n", boardCount);
+    } else {
         server.send(500, "application/json", "{\"error\":\"Failed to save configuration\"}");
-        return;
     }
-    
-    // Apply the board configuration immediately
-    apply_board_configs();
-    log(LOG_INFO, true, "Applied board configurations\n");
-    
-    // Create response with the new board
-    DynamicJsonDocument responseDoc(1024);
-    responseDoc["success"] = true;
-    responseDoc["message"] = "Board added successfully";
-    responseDoc["id"] = boardCount - 1; // ID of the newly added board
-    
-    String response;
-    serializeJson(responseDoc, response);
-    server.send(200, "application/json", response);
-    
-    log(LOG_INFO, true, "Board added successfully, new count: %d\n", boardCount);
 }
 
 void handleUpdateBoard() {
@@ -572,9 +584,6 @@ void handleGetAllBoards() {
     server.sendHeader("Access-Control-Allow-Methods", "GET");
     server.sendHeader("Access-Control-Allow-Headers", "Content-Type");
     
-    // Print board count for debugging
-    log(LOG_INFO, false, "Serving board configurations, count: %d\n", boardCount);
-    
     // If there are no boards, return an empty array
     if (boardCount == 0) {
         log(LOG_INFO, true, "No boards configured, returning empty array\n");
@@ -599,6 +608,7 @@ void handleGetAllBoards() {
         board["slave_id"] = boardConfigs[i].slaveID;
         board["modbus_port"] = boardConfigs[i].modbusPort;
         board["poll_time"] = boardConfigs[i].pollTime;
+        board["initialised"] = boardConfigs[i].initialised; // Add initialization status
         
         // Add board-specific settings based on type
         if (boardConfigs[i].type == THERMOCOUPLE_IO) {
@@ -622,7 +632,7 @@ void handleGetAllBoards() {
     // Debug the response
     String debugResponse;
     serializeJson(doc, debugResponse);
-    log(LOG_INFO, false, "API Response: %s\n", debugResponse.c_str());
+    //log(LOG_INFO, false, "API Response: %s\n", debugResponse.c_str());
     
     // Send response
     String response;
@@ -637,11 +647,16 @@ bool addBoard(BoardConfig newBoard) {
         return false;
     }
     
-    // Add the new board
+    // Set a default value for the initialised field
+    // New boards are not initialised by default
+    newBoard.initialised = false;
+    
+    // Set board index and copy to our array
+    newBoard.boardIndex = boardCount;
     boardConfigs[boardCount] = newBoard;
     boardCount++;
     
-    // Save to LittleFS
+    // Save configuration
     return saveBoardConfig();
 }
 
@@ -748,5 +763,94 @@ const char* getDeviceTypeName(deviceType_t type) {
             return "Power Meter";
         default:
             return "Unknown";
+    }
+}
+
+// Initialise a board by assigning it an address through the Modbus assignment protocol
+void handleInitialiseBoard() {
+    log(LOG_INFO, true, "handleInitialiseBoard called\n");
+    // Add CORS headers
+    server.sendHeader("Access-Control-Allow-Origin", "*");
+    server.sendHeader("Access-Control-Allow-Methods", "GET");
+    server.sendHeader("Access-Control-Allow-Headers", "Content-Type");
+    
+    // Debug info for API call
+    log(LOG_INFO, true, "Board initialisation API called\n");
+    log(LOG_INFO, true, "API has %d arguments\n", server.args());
+    for (int i = 0; i < server.args(); i++) {
+        log(LOG_INFO, true, "Arg[%d] = %s, Value = %s\n", i, server.argName(i).c_str(), server.arg(i).c_str());
+    }
+    
+    // Check if ID parameter is provided
+    if (!server.hasArg("id")) {
+        log(LOG_WARNING, true, "Missing board ID parameter\n");
+        server.send(400, "application/json", "{\"error\":\"Missing board ID parameter\"}");
+        return;
+    }
+    
+    // Get board ID
+    uint8_t boardId = server.arg("id").toInt();
+    log(LOG_INFO, true, "Initialising board with ID: %d\n", boardId);
+    
+    // Check if board exists
+    if (boardId >= boardCount) {
+        log(LOG_WARNING, true, "Board ID %d not found (max: %d)\n", boardId, boardCount);
+        server.send(404, "application/json", "{\"error\":\"Board not found\"}");
+        return;
+    }
+    
+    // Get the board's configured Modbus port
+    uint8_t port = boardConfigs[boardId].modbusPort;
+    
+    log(LOG_INFO, true, "Board is on Modbus port %d\n", port);
+    
+    log(LOG_INFO, true, "Attempting to assign address on port %d\n", port);
+    
+    // Attempt to initialise the board using the correct Modbus configuration
+    modbusConfig_t *busCfg = &modbusConfig[port];
+    
+    
+    // Print current ID assignments
+    log(LOG_INFO, true, "Current assigned IDs on port %d:\n", port);
+    for (int i = 1; i < 10; i++) {
+        log(LOG_INFO, false, "%d: %s ", i, busCfg->idAssigned[i] ? "assigned" : "free");
+    }
+    log(LOG_INFO, true, "\n");
+    
+    // This function communicates with a board in address assignment mode (address 245)
+    // and assigns it a new slave ID
+    uint8_t assigned_id = assign_address(busCfg);
+    
+    log(LOG_INFO, true, "assign_address() returned: %d\n", assigned_id);
+    
+    if (assigned_id > 0) {
+        // Update the board's initialised flag and slave ID
+        boardConfigs[boardId].initialised = true;
+        boardConfigs[boardId].slaveID = assigned_id;
+        
+        // Save the configuration
+        if (saveBoardConfig()) {
+            log(LOG_INFO, true, "Board initialised successfully with slave ID: %d\n", assigned_id);
+            
+            // Create JSON response
+            DynamicJsonDocument responseDoc(256);
+            responseDoc["success"] = true;
+            responseDoc["message"] = "Board initialised successfully";
+            responseDoc["slave_id"] = assigned_id;
+            
+            String response;
+            serializeJson(responseDoc, response);
+            log(LOG_INFO, true, "Sending success response: %s\n", response.c_str());
+            server.send(200, "application/json", response);
+            
+            // Apply the configuration immediately
+            apply_board_configs();
+        } else {
+            log(LOG_WARNING, true, "Failed to save board configuration after initialisation\n");
+            server.send(500, "application/json", "{\"error\":\"Failed to save configuration\"}");
+        }
+    } else {
+        log(LOG_WARNING, true, "Failed to initialise board - no board in assignment mode detected\n");
+        server.send(500, "application/json", "{\"error\":\"Failed to initialise board. Ensure the board is in Address Assignment Mode (blue LED lit).\"}");
     }
 }

@@ -215,7 +215,7 @@ async function loadNetworkSettings() {
 
 // Event listeners
 document.addEventListener('DOMContentLoaded', () => {
-    console.log('DOM loaded - initializing board configuration system');
+    console.log('DOM loaded - initialising board configuration system');
     
     // Load board configurations on page load
     loadBoardConfigurations();
@@ -229,7 +229,7 @@ document.addEventListener('DOMContentLoaded', () => {
     updateLiveClock();
     updateNetworkInfo();    // Update network status info
     
-    // Initialize system status if system tab is active initially
+    // Initialise system status if system tab is active initially
     if (document.querySelector('#system').classList.contains('active')) {
         updateSystemStatus();
     }
@@ -571,8 +571,7 @@ function loadDirectory(path, retryCount = 0) {
     fileListContainer.innerHTML = '<div class="loading">Loading files...</div>';
     updatePathNavigator(path);
     
-    // Add a short delay before first API call after initialization
-    // This helps ensure the SD card is fully ready
+    // Add a short delay before first API call after initialisation
     const initialDelay = (retryCount === 0) ? 500 : 0;
     
     setTimeout(() => {
@@ -580,12 +579,12 @@ function loadDirectory(path, retryCount = 0) {
             .then(response => {
                 if (!response.ok) {
                     // If we get a non-OK response but the SD is inserted according to the system status
-                    // it could be a timing issue with the SD card initialization
+                    // it could be a timing issue with the SD card initialisation
                     if (response.status === 503 && retryCount < maxRetries) {
                         // Wait longer with each retry
                         const delay = 1000 * (retryCount + 1);
                         console.log(`SD card not ready, retrying in ${delay}ms (attempt ${retryCount + 1}/${maxRetries})`);
-                        fileListContainer.innerHTML = `<div class="loading">SD card initializing, please wait... (${retryCount + 1}/${maxRetries})</div>`;
+                        fileListContainer.innerHTML = `<div class="loading">SD card initialising, please wait... (${retryCount + 1}/${maxRetries})</div>`;
                         
                         setTimeout(() => {
                             loadDirectory(path, retryCount + 1);
@@ -594,7 +593,7 @@ function loadDirectory(path, retryCount = 0) {
                     }
                     
                     throw new Error(response.status === 503 ? 
-                        'SD card not ready. It may be initializing or experiencing an issue.' :
+                        'SD card not ready. It may be initialising or experiencing an issue.' :
                         'Failed to list directory');
                 }
                 return response.json();
@@ -644,7 +643,7 @@ function checkAndLoadDirectory() {
                 loadDirectory(currentPath);
             } else if (data.sd && data.sd.inserted) {
                 // SD card is inserted but not fully ready - wait and retry
-                sdStatusElement.innerHTML = '<div class="status-info">SD Card initializing, please wait...</div>';
+                sdStatusElement.innerHTML = '<div class="status-info">SD Card initialising, please wait...</div>';
                 setTimeout(checkAndLoadDirectory, 1500);
             } else {
                 // SD card not inserted
@@ -699,14 +698,14 @@ function checkSDCardStatus() {
         });
 }
 
-// Initialize the file manager
+// Initialise the file manager
 function initFileManager() {
     if (!document.getElementById('filemanager')) return;
     
-    console.log('Initializing file manager');
+    console.log('Initialising file manager');
     fileManagerActive = true;
     
-    // Initialize file manager
+    // Initialise file manager
     checkSDCardStatus();
     
     // Start periodic SD card status checks
@@ -715,7 +714,7 @@ function initFileManager() {
     }
     sdStatusInterval = setInterval(checkSDCardStatus, 3000); // Check every 3 seconds
     
-    // Initialize with our improved function
+    // Initialise with our improved function
     checkAndLoadDirectory();
 }
 
@@ -726,7 +725,7 @@ function navigateTo(path) {
     }
 }
 
-// Initialize File Manager when switching to the tab
+// Initialise File Manager when switching to the tab
 document.addEventListener('DOMContentLoaded', () => {
     // Add tab switching behavior for File Manager tab
     const fileManagerTab = document.querySelector('a[data-page="filemanager"]');
@@ -749,7 +748,7 @@ document.addEventListener('DOMContentLoaded', () => {
         });
     });
     
-    // Initialize if file manager is the active tab on page load
+    // Initialise if file manager is the active tab on page load
     if (document.querySelector('#filemanager.active')) {
         fileManagerActive = true;
         initFileManager();
@@ -1274,14 +1273,20 @@ function renderSingleBoard(board, index, container) {
         portDisplay = (parseInt(board.modbus_port) + 1).toString();
     }
     
+    // Determine initialisation status
+    const initStatus = board.initialised ? 'Initialised' : 'Not Initialised';
+    const initStatusClass = board.initialised ? 'init-status-ok' : 'init-status-pending';
+    
     // Create the board item HTML
     boardItem.innerHTML = `
         <div class="board-info">
             <span class="board-type">${board.name || 'Unnamed Board'}</span>
             <span class="board-details">Type: ${boardTypeName}, Port: ${portDisplay}</span>
+            <span class="board-init-status ${initStatusClass}">Status: ${initStatus}</span>
         </div>
         <div class="board-actions">
             <button class="btn-edit" data-index="${index}"><i class="fas fa-edit"></i> Edit</button>
+            <button class="btn-initialise" data-index="${index}" onclick="console.log('Init button direct click for index ${index}');showInitialisePrompt(${index})"><i class="fas fa-microchip"></i> Initialise</button>
             <button class="btn-delete" data-index="${index}"><i class="fas fa-trash"></i> Delete</button>
         </div>
     `;
@@ -1293,6 +1298,16 @@ function renderSingleBoard(board, index, container) {
     const editBtn = boardItem.querySelector('.btn-edit');
     if (editBtn) {
         editBtn.addEventListener('click', () => editBoard(index));
+    }
+    
+    // We're still adding this event listener, but also added the onclick attribute for direct testing
+    const initBtn = boardItem.querySelector('.btn-initialise');
+    if (initBtn) {
+        console.log(`Adding click handler to initialise button for board index ${index}`);
+        initBtn.addEventListener('click', function() {
+            console.log(`Initialise button clicked for board index ${index}`);
+            showInitialisePrompt(index);
+        });
     }
     
     const deleteBtn = boardItem.querySelector('.btn-delete');
@@ -1515,7 +1530,7 @@ function setupThermocoupleChannelTabs() {
 }
 
 document.addEventListener('DOMContentLoaded', () => {
-    console.log('DOM loaded - initializing board configuration system');
+    console.log('DOM loaded - initialising board configuration system');
     
     // Load board configurations on page load
     loadBoardConfigurations();
@@ -1564,4 +1579,212 @@ document.addEventListener('DOMContentLoaded', () => {
             saveBoardConfiguration();
         });
     }
+    
+    // Set up board initialisation handlers - with direct function call for debugging
+    const cancelInitBoard = document.getElementById('cancelInitBoard');
+    const confirmInitBoard = document.getElementById('confirmInitBoard');
+    const initBoardModal = document.getElementById('initBoardModal');
+    
+    console.log('Setting up initialisation modal handlers');
+    console.log('Cancel button exists:', !!cancelInitBoard);
+    console.log('Confirm button exists:', !!confirmInitBoard);
+    console.log('Modal exists:', !!initBoardModal);
+    
+    if (cancelInitBoard) {
+        console.log('Setting up cancel initialisation handler');
+        cancelInitBoard.addEventListener('click', () => {
+            console.log('Cancel initialisation clicked');
+            hideInitialisePrompt();
+        });
+    } else {
+        console.log('Cancel initialisation button not found');
+    }
+    
+    if (confirmInitBoard) {
+        console.log('Setting up confirm initialisation handler');
+        confirmInitBoard.onclick = function() {
+            console.log('Confirm initialisation clicked via onclick');
+            
+            // Store the index in a local variable before it gets reset
+            const boardIndexToInitialise = initialisingBoardIndex;
+            console.log('Stored board index for initialisation:', boardIndexToInitialise);
+            
+            // Hide the prompt (this will set initialisingBoardIndex to null)
+            hideInitialisePrompt();
+            
+            // Initialise the board using our locally stored index
+            if (boardIndexToInitialise !== null) {
+                console.log('Initialising board index:', boardIndexToInitialise);
+                
+                // Use a setTimeout to allow the modal to be hidden first
+                setTimeout(() => {
+                    console.log('Calling initialiseBoard with index:', boardIndexToInitialise);
+                    initialiseBoard(boardIndexToInitialise);
+                }, 100);
+            } else {
+                console.error('No board index specified for initialisation');
+            }
+        };
+    } else {
+        console.log('Confirm initialisation button not found');
+    }
+    
+    // Close the modal when clicking outside it
+    if (initBoardModal) {
+        console.log('Setting up modal outside click handler');
+        initBoardModal.addEventListener('click', (e) => {
+            if (e.target === initBoardModal) {
+                hideInitialisePrompt();
+            }
+        });
+    } else {
+        console.log('Modal not found');
+    }
 });
+
+// Global variable to store the current board being initialised
+let initialisingBoardIndex = null;
+
+// Show the board initialisation prompt
+function showInitialisePrompt(index) {
+    console.log('showInitialisePrompt called with index:', index);
+    
+    // Store the board index
+    initialisingBoardIndex = index;
+    
+    // Show the modal - with additional debugging
+    const initBoardModal = document.getElementById('initBoardModal');
+    console.log('Modal element:', initBoardModal);
+    
+    if (initBoardModal) {
+        console.log('Found initBoardModal, adding active class');
+        initBoardModal.classList.add('active');
+        console.log('Current classes:', initBoardModal.className);
+        
+        // Double-check that our buttons exist
+        const cancelBtn = document.getElementById('cancelInitBoard');
+        const confirmBtn = document.getElementById('confirmInitBoard');
+        console.log('Cancel button exists:', !!cancelBtn);
+        console.log('Confirm button exists:', !!confirmBtn);
+    } else {
+        console.error('ERROR: Could not find initBoardModal element in the DOM');
+        // List all modal-overlay elements to see what exists
+        const allModals = document.querySelectorAll('.modal-overlay');
+        console.log('Found', allModals.length, 'modal-overlay elements');
+        allModals.forEach((modal, i) => {
+            console.log(`Modal ${i} id:`, modal.id);
+        });
+    }
+}
+
+// Hide the board initialisation prompt
+function hideInitialisePrompt() {
+    console.log('hideInitialisePrompt called');
+    
+    // Reset the board index
+    initialisingBoardIndex = null;
+    
+    // Hide the modal
+    const initBoardModal = document.getElementById('initBoardModal');
+    if (initBoardModal) {
+        console.log('Found initBoardModal, removing active class');
+        initBoardModal.classList.remove('active');
+    } else {
+        console.error('ERROR: Could not find initBoardModal element when trying to hide it');
+    }
+}
+
+// Initialise a board by assigning it an address - with direct XHR for better debug visibility
+async function initialiseBoard(index) {
+    if (index === null || index < 0 || index >= boardConfigurations.length) {
+        showToast('error', 'Error', 'Invalid board index for initialisation');
+        return;
+    }
+    
+    showToast('info', 'Initialising...', 'Attempting to initialise board. This may take a few seconds.', 10000);
+    console.log('Attempting to initialise board at index:', index);
+    
+    try {
+        // Use XMLHttpRequest for better debug visibility
+        const xhr = new XMLHttpRequest();
+        const url = `/api/boards/initialise?id=${index}`;
+        
+        console.log('Making XHR request to:', url);
+        
+        // Enable CORS and credentials
+        xhr.withCredentials = true;
+        
+        // Log all XHR events
+        xhr.onloadstart = () => console.log('XHR load started');
+        xhr.onprogress = (e) => console.log(`XHR progress: ${e.loaded} bytes`);
+        xhr.onabort = () => console.log('XHR aborted');
+        xhr.onerror = () => console.log('XHR error occurred');
+        xhr.ontimeout = () => console.log('XHR timed out');
+        xhr.onloadend = () => console.log('XHR load ended');
+        
+        // Return a promise that resolves when the request completes
+        const response = await new Promise((resolve, reject) => {
+            xhr.onreadystatechange = function() {
+                console.log(`XHR state change: readyState=${xhr.readyState}, status=${xhr.status}`);
+                
+                if (xhr.readyState === 4) {
+                    if (xhr.status >= 200 && xhr.status < 300) {
+                        try {
+                            const result = JSON.parse(xhr.responseText);
+                            resolve({ ok: true, status: xhr.status, result });
+                        } catch (error) {
+                            console.error('Error parsing JSON response:', error);
+                            reject(new Error('Invalid JSON response'));
+                        }
+                    } else {
+                        console.error('XHR request failed:', xhr.status, xhr.statusText);
+                        console.error('XHR response text:', xhr.responseText);
+                        reject(new Error(`Server returned ${xhr.status}: ${xhr.statusText}`));
+                    }
+                }
+            };
+            
+            // Set a slightly longer timeout for initialization
+            xhr.timeout = 15000; // 15 seconds
+            
+            xhr.open('GET', url, true);
+            
+            // Add explicit CORS headers
+            xhr.setRequestHeader('Access-Control-Allow-Origin', '*');
+            xhr.setRequestHeader('Access-Control-Allow-Methods', 'GET');
+            xhr.setRequestHeader('Access-Control-Allow-Headers', 'Content-Type');
+            
+            xhr.send();
+            console.log('XHR request sent');
+        });
+        
+        console.log('XHR response:', response);
+        
+        // Remove the initialising toast
+        document.querySelectorAll('.toast').forEach(toast => {
+            if (toast.querySelector('.toast-title').textContent === 'Initialising...') {
+                toast.remove();
+            }
+        });
+        
+        if (!response.ok) {
+            throw new Error(response.result.error || 'Failed to initialise board');
+        }
+        
+        // Show success message
+        showToast('success', 'Success', `Board ${boardConfigurations[index].name} initialised with Slave ID ${response.result.slave_id}`);
+        
+        // Update the board configuration in our local array
+        boardConfigurations[index].initialised = true;
+        boardConfigurations[index].slave_id = response.result.slave_id;
+        
+        // Re-render the board list to show the updated initialisation status
+        renderBoardsList();
+        
+    } catch (error) {
+        console.error('Board initialisation error:', error);
+        
+        // Show error message
+        showToast('error', 'Error', `Failed to initialise board. ${error.message || ''} Ensure the board is in Address Assignment Mode (blue LED lit).`);
+    }
+}

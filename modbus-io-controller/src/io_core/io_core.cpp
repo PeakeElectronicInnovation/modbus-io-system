@@ -23,13 +23,13 @@ void init_io_core(void) {
     bus1.begin(500000);
     bus2.begin(500000);
 
-    // Initialize board configuration
+    // Initialise board configuration
     init_board_config();
 
     // Apply saved board configurations
     apply_board_configs();
 
-    log(LOG_INFO, false, "IO Core initialized\n");
+    log(LOG_INFO, false, "IO Core initialised\n");
 }
 
 // Apply board configurations from config file
@@ -43,6 +43,13 @@ void apply_board_configs() {
     for (uint8_t i = 0; i < count; i++) {
         BoardConfig* board = getBoard(i);
         if (!board) continue;
+        
+        // Skip boards that haven't been initialised with a Modbus address
+        if (!board->initialised) {
+            log(LOG_INFO, false, "Skipping board %d (%s) - not yet initialised\n", 
+                i, board->boardName);
+            continue;
+        }
 
         switch (board->type) {
             case THERMOCOUPLE_IO:
@@ -114,6 +121,14 @@ void manage_io_core(void) {
     // Check for configured devices
     for (int i = 0; i < 64; i++) {
         if (deviceIndex[i].configured) {
+            // Get the board configuration for this device
+            BoardConfig* board = getBoard(deviceIndex[i].index);
+            
+            // Skip devices that haven't been properly initialised
+            if (!board || !board->initialised) {
+                continue;
+            }
+            
             switch (deviceIndex[i].type) {
                 case THERMOCOUPLE_IO:
                     manage_thermocouple(deviceIndex[i].index);
@@ -182,7 +197,7 @@ void manage_thermocouple(uint8_t index) {
     }
     if (changed) {
         if(thermocoupleIO_index.tcIO[index].bus->writeMultipleCoils(thermocoupleIO_index.tcIO[index].slaveID, 0x0000, coils, 32)) {
-            log(LOG_DEBUG, false, "Thermocouple board at index %d coils written successfully\n", index);
+            log(LOG_INFO, true, "Thermocouple board at index %d coils written successfully\n", index);
         } else {
             log(LOG_ERROR, true, "Thermocouple board at index %d coils write failed\n", index);
         }
@@ -201,10 +216,10 @@ void manage_thermocouple(uint8_t index) {
         int retries = 0;
         while (retries < 3) {
             if(thermocoupleIO_index.tcIO[index].bus->writeMultipleHoldingRegisters(thermocoupleIO_index.tcIO[index].slaveID, 0x0000, holdingRegisters, 42)) {
-                log(LOG_DEBUG, false, "Holding registers written successfully\n");
+                log(LOG_INFO, true, "Holding registers written successfully\n");
                 break;
             } else {
-                log(LOG_ERROR, false, "Holding registers write failed, retrying...\n");
+                log(LOG_ERROR, true, "Holding registers write failed, retrying...\n");
                 retries++;
                 delay(100); // Wait before retrying
             }
@@ -215,19 +230,17 @@ void manage_thermocouple(uint8_t index) {
 
     // Read registers
     if(thermocoupleIO_index.tcIO[index].bus->readDiscreteInputs(thermocoupleIO_index.tcIO[index].slaveID, 0x0000, discreteInputs, 32)) {
-        log(LOG_DEBUG, false, "Thermocouple %d discrete inputs read successfully\n", index);
+        log(LOG_DEBUG, false, "Thermocouple IO board index %d discrete inputs read successfully\n", index);
     } else {
-        log(LOG_ERROR, false, "Thermocouple %d discrete inputs read failed\n", index);
+        log(LOG_ERROR, true, "Thermocouple IO board index %d discrete inputs read failed\n", index);
     }
     if(thermocoupleIO_index.tcIO[index].bus->readInputRegisters(thermocoupleIO_index.tcIO[index].slaveID, 0x0000, inputRegisters, 48)) {
-        log(LOG_DEBUG, false, "Thermocouple %d input registers read successfully\n", index);
+        log(LOG_DEBUG, false, "Thermocouple IO board index %d input registers read successfully\n", index);
     } else {
-        log(LOG_ERROR, false, "Thermocouple %d input registers read failed\n", index);
+        log(LOG_ERROR, true, "Thermocouple IO board index %d input registers read failed\n", index);
     }
     memcpy(&thermocoupleIO_index.tcIO[index].reg.outputState, discreteInputs, sizeof(discreteInputs));
     memcpy(&thermocoupleIO_index.tcIO[index].reg.temperature, inputRegisters, sizeof(inputRegisters));
-
-    log(LOG_DEBUG, false, "Thermocouple 0 temperature: %.2f\n", thermocoupleIO_index.tcIO[index].reg.temperature[0]);
 }
 
 void manage_universal_in(uint8_t index) {

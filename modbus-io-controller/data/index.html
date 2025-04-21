@@ -34,8 +34,31 @@
                     <h3>Confirm System Reboot</h3>
                     <p>Are you sure you want to reboot the system? All ongoing operations will be interrupted.</p>
                     <div class="modal-buttons">
-                        <button id="cancelReboot" class="modal-cancel">Cancel</button>
-                        <button id="confirmReboot" class="modal-confirm">Yes, Reboot</button>
+                        <button id="cancelReboot" class="btn btn-secondary">Cancel</button>
+                        <button id="confirmReboot" class="btn btn-primary">Yes, Reboot</button>
+                    </div>
+                </div>
+            </div>
+            
+            <!-- Board Initialisation Modal -->
+            <div id="initBoardModal" class="modal-overlay">
+                <div class="confirmation-modal">
+                    <h3>Initialise Expansion Board</h3>
+                    <div class="init-instructions">
+                        <h4>How to put the board in Address Assignment Mode:</h4>
+                        <ol>
+                            <li>Locate the <strong>Address Set</strong> button on your expansion board.</li>
+                            <li>Press and hold the button for <strong>3 seconds</strong>.</li>
+                            <li>The <strong>RS485 Bus LED</strong> will light up <strong>blue</strong>, indicating the board is ready for assignment.</li>
+                        </ol>
+                        <div class="init-image-container">
+                            <img src="AddressSet.png" alt="Address Set Button Location" class="init-image">
+                        </div>
+                        <p class="init-message">Once the board is in Address Assignment Mode (blue LED lit), click "Initialise Board" below to assign a Modbus slave ID to this board.</p>
+                    </div>
+                    <div class="modal-buttons">
+                        <button id="cancelInitBoard" class="btn btn-secondary">Cancel</button>
+                        <button id="confirmInitBoard" class="btn btn-primary">Initialise Board</button>
                     </div>
                 </div>
             </div>
@@ -51,7 +74,9 @@
                         <div class="configured-boards">
                             <div class="boards-header">
                                 <h2>Configured Boards</h2>
-                                <button id="addBoardBtn" class="btn btn-primary"><i class="fas fa-plus"></i> Add New Expansion Board</button>
+                                <div class="board-controls">
+                                    <button id="addBoardBtn" class="btn btn-primary">Add Board</button>
+                                </div>
                             </div>
                             <div id="boardsList" class="boards-list">
                                 <!-- Boards will be displayed here -->

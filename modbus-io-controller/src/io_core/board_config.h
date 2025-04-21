@@ -25,7 +25,8 @@ struct BoardConfig {
     uint8_t slaveID;
     uint8_t modbusPort;
     uint32_t pollTime;
-    bool initialized; // Track if board has been initialized with address assignment
+    bool initialised; // Track if board has been initialised with address assignment
+    bool connected;   // Track if board is responding to Modbus requests
     
     // Board-specific settings
     union {
@@ -57,6 +58,7 @@ void handleAddBoard(void);
 void handleUpdateBoard(void);
 void handleDeleteBoard(void);
 void handleGetAllBoards(void);
+void handleInitialiseBoard(void);
 
 // Board management functions
 bool addBoard(BoardConfig newBoard);
@@ -66,6 +68,7 @@ uint8_t getBoardCount(void);
 BoardConfig* getBoard(uint8_t index);
 uint8_t assignBoardIndex(deviceType_t type);
 uint8_t assignSlaveID(uint8_t modbusPort);
+bool initialiseBoard(uint8_t index);
 
 // Helper functions
 const char* getDeviceTypeName(deviceType_t type);

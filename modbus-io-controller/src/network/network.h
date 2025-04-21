@@ -22,13 +22,17 @@
 void init_network(void);
 void manageNetwork(void);
 
+// Network module header
 void setupEthernet(void);
 bool loadNetworkConfig(void);
 void saveNetworkConfig(void);
 bool applyNetworkConfig(void);
 
-void setupNetworkAPI(void);
+// Web server initialization
 void setupWebServer(void);
+void startWebServer(void);
+void setupNetworkAPI(void);
+
 void setupTimeAPI(void);
 
 void manageEthernet(void);

@@ -20,9 +20,13 @@ unsigned long lastNetworkCheckTime = 0;
 // Network component initialisation functions ------------------------------>
 void init_network() {
     setupEthernet();
-    setupWebServer();
+    
+    // Make sure all API endpoints are set up BEFORE starting the web server
     setupNetworkAPI();
     setupTimeAPI();
+    
+    // Import: DO NOT call server.begin() here
+    // It will be called after all API endpoints are registered
 }
 
 void manageNetwork(void) {
@@ -444,6 +448,15 @@ void setupWebServer()
   server.onNotFound([]()
                     { handleFile(server.uri().c_str()); });
 
+  // NOTE: server.begin() is now moved to startWebServer() function
+  log(LOG_INFO, true, "Web server configured, but not yet started\n");
+}
+
+// Start the web server after all API endpoints have been registered
+void startWebServer() {
+  log(LOG_INFO, true, "Starting web server...\n");
+  
+  // Start the server
   server.begin();
   log(LOG_INFO, true, "HTTP server started\n");
   
