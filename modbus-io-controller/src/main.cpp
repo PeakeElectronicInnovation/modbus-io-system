@@ -16,8 +16,6 @@ void setup() // Eth interface (keep hardware-specific initialization on core 0)
   log(LOG_INFO, false, "Core 0 setup complete\n");
   core0setupComplete = true;
   while (!core1setupComplete) delay(100);
-  if (networkConfig.ntpEnabled) handleNTPUpdates(true);
-  log(LOG_INFO, false, "<---System initialisation complete --->\n\n");
 }
 
 void setup1()
@@ -28,6 +26,8 @@ void setup1()
   log(LOG_INFO, false, "Core 1 setup complete\n");
   core1setupComplete = true;
   while (!core0setupComplete) delay(100);
+  if (!sdInfo.inserted) return;
+  while (!sdInfo.ready || sdLocked) delay(100);
   log(LOG_INFO, true, "---------> System started successfully <---------\n");
 }
 

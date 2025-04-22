@@ -22,7 +22,7 @@ void init_board_config(void) {
 
 // Load board configuration from LittleFS
 bool loadBoardConfig() {
-    log(LOG_INFO, true, "Loading board configuration:\n");
+    log(LOG_INFO, false, "Loading board configuration:\n");
     
     // Check if LittleFS is mounted
     if (!LittleFS.begin()) {
@@ -55,7 +55,7 @@ bool loadBoardConfig() {
     
     // Check magic number
     uint8_t magicNumber = doc["magic_number"] | 0;
-    log(LOG_INFO, true, "Board config magic number: %x\n", magicNumber);
+    log(LOG_INFO, false, "Board config magic number: %x\n", magicNumber);
     if (magicNumber != BOARD_CONFIG_MAGIC_NUMBER) {
         log(LOG_WARNING, true, "Invalid board config magic number\n");
         return false;
@@ -112,7 +112,7 @@ bool loadBoardConfig() {
         index++;
     }
     
-    log(LOG_INFO, true, "Loaded %d board configurations\n", boardCount);
+    log(LOG_INFO, false, "Loaded %d board configurations\n", boardCount);
     return true;
 }
 
@@ -185,7 +185,7 @@ bool saveBoardConfig() {
     // Debug output to validate config
     String debugOutput;
     serializeJson(doc, debugOutput);
-    log(LOG_INFO, true, "Board config saved: %s\n", debugOutput.c_str());
+    log(LOG_INFO, false, "Board config saved: %s\n", debugOutput.c_str());
     
     // Close file
     configFile.close();
@@ -198,7 +198,7 @@ bool saveBoardConfig() {
 
 // Set up API endpoints for board configuration
 void setupBoardConfigAPI() {
-    log(LOG_INFO, true, "Setting up board configuration API\n");
+    log(LOG_INFO, false, "Setting up board configuration API\n");
     // Global OPTIONS handler for CORS preflight requests
     server.on("/api/boards", HTTP_OPTIONS, []() {
         server.sendHeader("Access-Control-Allow-Origin", "*");
@@ -232,7 +232,7 @@ void setupBoardConfigAPI() {
     });
     
     // Register the initialise endpoint
-    log(LOG_INFO, true, "Registering /api/boards/initialise endpoint\n");
+    log(LOG_INFO, false, "Registering /api/boards/initialise endpoint\n");
     
     // Also handle OPTIONS for the /api/boards/initialise endpoint
     server.on("/api/boards/initialise", HTTP_OPTIONS, []() {
@@ -243,7 +243,7 @@ void setupBoardConfigAPI() {
     });
     
     server.on("/api/boards/initialise", HTTP_GET, handleInitialiseBoard);
-    log(LOG_INFO, true, "Board API setup complete\n");
+    log(LOG_INFO, false, "Board API setup complete\n");
 }
 
 void handleGetBoardConfig() {
@@ -322,11 +322,11 @@ void handleAddBoard() {
     
     // Debug request info
     String requestData = server.arg("plain");
-    log(LOG_INFO, true, "Add board request body length: %d\n", requestData.length());
+    log(LOG_INFO, false, "Add board request body length: %d\n", requestData.length());
     if (requestData.length() > 0) {
         // Only print part of the request to avoid log overflow
         String truncated = requestData.substring(0, min(200, (int)requestData.length()));
-        log(LOG_INFO, true, "Add board request (truncated): %s\n", truncated.c_str());
+        log(LOG_INFO, false, "Add board request (truncated): %s\n", truncated.c_str());
     } else {
         log(LOG_WARNING, true, "Empty request body\n");
         server.send(400, "application/json", "{\"error\":\"Empty request body\"}");
@@ -409,7 +409,7 @@ void handleAddBoard() {
     if (addBoard(newBoard)) {
         // Apply the board configuration immediately
         apply_board_configs();
-        log(LOG_INFO, true, "Applied board configurations\n");
+        log(LOG_INFO, false, "Applied board configurations\n");
         
         // Create response with the new board
         DynamicJsonDocument responseDoc(1024);
@@ -441,11 +441,11 @@ void handleUpdateBoard() {
     
     // Debug request info
     String requestData = server.arg("plain");
-    log(LOG_INFO, true, "Update board request body length: %d\n", requestData.length());
+    log(LOG_INFO, false, "Update board request body length: %d\n", requestData.length());
     if (requestData.length() > 0) {
         // Only print part of the request to avoid log overflow
         String truncated = requestData.substring(0, min(200, (int)requestData.length()));
-        log(LOG_INFO, true, "Update board request (truncated): %s\n", truncated.c_str());
+        log(LOG_INFO, false, "Update board request (truncated): %s\n", truncated.c_str());
     } else {
         log(LOG_WARNING, true, "Empty request body\n");
         server.send(400, "application/json", "{\"error\":\"Empty request body\"}");
@@ -770,17 +770,17 @@ const char* getDeviceTypeName(deviceType_t type) {
 
 // Initialise a board by assigning it an address through the Modbus assignment protocol
 void handleInitialiseBoard() {
-    log(LOG_INFO, true, "handleInitialiseBoard called\n");
+    log(LOG_INFO, false, "handleInitialiseBoard called\n");
     // Add CORS headers
     server.sendHeader("Access-Control-Allow-Origin", "*");
     server.sendHeader("Access-Control-Allow-Methods", "GET");
     server.sendHeader("Access-Control-Allow-Headers", "Content-Type");
     
     // Debug info for API call
-    log(LOG_INFO, true, "Board initialisation API called\n");
-    log(LOG_INFO, true, "API has %d arguments\n", server.args());
+    log(LOG_INFO, false, "Board initialisation API called\n");
+    log(LOG_INFO, false, "API has %d arguments\n", server.args());
     for (int i = 0; i < server.args(); i++) {
-        log(LOG_INFO, true, "Arg[%d] = %s, Value = %s\n", i, server.argName(i).c_str(), server.arg(i).c_str());
+        log(LOG_INFO, false, "Arg[%d] = %s, Value = %s\n", i, server.argName(i).c_str(), server.arg(i).c_str());
     }
     
     // Check if ID parameter is provided
@@ -792,7 +792,7 @@ void handleInitialiseBoard() {
     
     // Get board ID
     uint8_t boardId = server.arg("id").toInt();
-    log(LOG_INFO, true, "Initialising board with ID: %d\n", boardId);
+    log(LOG_INFO, false, "Initialising board with ID: %d\n", boardId);
     
     // Check if board exists
     if (boardId >= boardCount) {
@@ -804,26 +804,26 @@ void handleInitialiseBoard() {
     // Get the board's configured Modbus port
     uint8_t port = boardConfigs[boardId].modbusPort;
     
-    log(LOG_INFO, true, "Board is on Modbus port %d\n", port);
+    log(LOG_INFO, false, "Board is on Modbus port %d\n", port);
     
-    log(LOG_INFO, true, "Attempting to assign address on port %d\n", port);
+    log(LOG_INFO, false, "Attempting to assign address on port %d\n", port);
     
     // Attempt to initialise the board using the correct Modbus configuration
     modbusConfig_t *busCfg = &modbusConfig[port];
     
     
     // Print current ID assignments
-    log(LOG_INFO, true, "Current assigned IDs on port %d:\n", port);
+    log(LOG_INFO, false, "Current assigned IDs on port %d:\n", port);
     for (int i = 1; i < 10; i++) {
         log(LOG_INFO, false, "%d: %s ", i, busCfg->idAssigned[i] ? "assigned" : "free");
     }
-    log(LOG_INFO, true, "\n");
+    log(LOG_INFO, false, "\n");
     
     // This function communicates with a board in address assignment mode (address 245)
     // and assigns it a new slave ID
     uint8_t assigned_id = assign_address(busCfg);
     
-    log(LOG_INFO, true, "assign_address() returned: %d\n", assigned_id);
+    log(LOG_INFO, false, "assign_address() returned: %d\n", assigned_id);
     
     if (assigned_id > 0) {
         // Update the board's initialised flag and slave ID
@@ -842,7 +842,7 @@ void handleInitialiseBoard() {
             
             String response;
             serializeJson(responseDoc, response);
-            log(LOG_INFO, true, "Sending success response: %s\n", response.c_str());
+            log(LOG_INFO, false, "Sending success response: %s\n", response.c_str());
             server.send(200, "application/json", response);
             
             // Apply the configuration immediately

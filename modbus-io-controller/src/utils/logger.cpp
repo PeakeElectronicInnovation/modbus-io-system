@@ -17,7 +17,7 @@ void init_logger(void) {
         }
     }
     serialReady = true;
-    log(LOG_INFO, false, "Open Reactor Control System v%s\n", VERSION);
+    log(LOG_INFO, false, "Modbus IO Control System v%s\n", VERSION);
     log(LOG_INFO, false, "Starting system...\n");
 }
 
@@ -41,7 +41,6 @@ void log(uint8_t logLevel, bool logToSD, const char* format, ...) {
 
     va_end(args);
     
-    // Check for errors or truncation.
     if(len > 0) {
         if (logToSD) writeLog(buffer);
         if (!serialLocked) {
