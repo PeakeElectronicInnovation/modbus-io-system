@@ -70,13 +70,16 @@ struct thermocoupleIO_t {
     ModbusRTUMaster *bus;
     uint8_t slaveID;
     char boardName[14];
-    uint8_t status;
     uint32_t lastUpdate;
     uint32_t pollTime;
     thermocoupleModbus_t reg;
     bool coils[32];
     uint16_t holdingRegisters[40]; // first 2 registers are excluded!!! read only
     bool configInitialised = false;
+    bool modbusError = false;
+    bool I2CError = false;
+    bool PSUError = false;
+    float Vpsu = 0;
 };
   
 struct themocoupleIO_index_t {

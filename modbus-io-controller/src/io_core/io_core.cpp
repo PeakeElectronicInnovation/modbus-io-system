@@ -76,7 +76,6 @@ bool apply_thermocouple_config(BoardConfig* config) {
     // Configure the board
     thermocoupleIO_index.tcIO[config->boardIndex].bus = (config->modbusPort == 0) ? &bus1 : &bus2;
     thermocoupleIO_index.tcIO[config->boardIndex].slaveID = config->slaveID;
-    thermocoupleIO_index.tcIO[config->boardIndex].status = 0;
     thermocoupleIO_index.tcIO[config->boardIndex].lastUpdate = millis();
     thermocoupleIO_index.tcIO[config->boardIndex].pollTime = config->pollTime;
     thermocoupleIO_index.tcIO[config->boardIndex].reg.slaveID = config->slaveID;
@@ -128,13 +127,13 @@ void manage_io_core(void) {
             if (!board || !board->initialised) {
                 continue;
             }
-            
             switch (deviceIndex[i].type) {
                 case ANALOGUE_DIGITAL_IO:
                     manage_analogue_digital_io(deviceIndex[i].index);
                     break;
                 case THERMOCOUPLE_IO:
                     manage_thermocouple(deviceIndex[i].index);
+                    leds.setPixelColor(LED_MODBUS_STATUS, status.LEDcolour[LED_MODBUS_STATUS]);
                     break;
                 case RTD_IO:
                     manage_rtd(deviceIndex[i].index);
@@ -181,12 +180,22 @@ void manage_thermocouple(uint8_t index) {
             return;
         }
         thermocoupleIO_index.tcIO[index].configInitialised = true;
+        
+        if (!statusLocked) {
+            statusLocked = true;
+            status.modbusConnected = true;
+            status.updated = true;
+            statusLocked = false;
+        }
         return;
     }
     // Check if polling time has elapsed
     if(millis() - thermocoupleIO_index.tcIO[index].lastUpdate < thermocoupleIO_index.tcIO[index].pollTime) return;
     thermocoupleIO_index.tcIO[index].lastUpdate = millis();
     log(LOG_DEBUG, false, "Polling thermocouple board at index %d\n", index);
+
+    leds.setPixelColor(LED_MODBUS_STATUS, LED_STATUS_BUSY);
+    leds.show();
 
     // Check board is online
     uint16_t buf[1];
@@ -203,6 +212,16 @@ void manage_thermocouple(uint8_t index) {
     }
     getBoard(index)->connected = true;
     log(LOG_DEBUG, false, "Board at index %d is online\n", index);
+
+    // Get board status
+    if (!thermocoupleIO_index.tcIO[index].bus->readHoldingRegisters(thermocoupleIO_index.tcIO[index].slaveID, EXP_HOLDING_REG_STATUS, buf, 1)) {
+        log(LOG_ERROR, true, "Failed to read board status\n");
+        return;
+    }
+    thermocoupleIO_index.tcIO[index].modbusError = buf[0] & 0x01;
+    thermocoupleIO_index.tcIO[index].I2CError = (buf[0] >> 1) & 0x01;
+    thermocoupleIO_index.tcIO[index].PSUError = (buf[0] >> 2) & 0x01;
+    thermocoupleIO_index.tcIO[index].Vpsu = static_cast<float>(buf[0] >> 4) / 10.0f;
 
     // Register buffers
     bool coils[32];

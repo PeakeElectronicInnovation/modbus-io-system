@@ -47,6 +47,14 @@
 #define EEPROM_BOARDNAME_ADDR 0x03 // (14 bytes)
 #define EEPROM_CONFIG_ADDR    0x20 // (8 * sizeof(tc_config_t) = 80 bytes)
 
+// Limits
+#define PSU_VOLTAGE_MIN  12.0
+#define PSU_VOLTAGE_MAX  30.0
+#define PSU_FB_VREF      INTERNAL2V5
+#define PSU_FB_RAW_TO_mV 13.29210069
+#define PSU_FB_RAW_TO_V  0.01329210069
+
+
 // Objects
 tinyNeoPixel leds = tinyNeoPixel(2, PIN_LED_DAT, NEO_GRB);
 
@@ -73,6 +81,13 @@ struct tc_config_t {
     bool alertEdge = false;   // Triggered by rising temperature by default
     bool outputEnable = true; // MCU output enable line (user controlable)
 } tcConfig[8];  // Struct for EEPROM storage of thermocouple config data
+
+struct status_t {
+    bool modbusError = false;
+    bool I2CError = false;
+    bool PSUError = false;
+    uint16_t PSUvoltage = 0;
+} status; // Struct for status flags
 
 // Modbus data structures
 struct modbus_coil_t {      // FC01/05/15

@@ -152,7 +152,7 @@ void readAll() {
     modbusFlag.openCircuit[i] = tc[i].status.openCircuit;
     modbusFlag.shortCircuit[i] = tc[i].status.shortCircuit;  
   }
-  statusLedColour = error ? LED_ERROR : LED_OK;
+  status.I2CError = error;
   // Copy data to modbus registers (read only)
   memcpy(inputDiscrete, &modbusFlag, sizeof(modbusFlag)); // Copy the modbusFlag struct to the inputDiscrete array
   memcpy(inputReg, &modbusInput, sizeof(modbusInput)); // Copy the modbusInput struct to the inputReg array
@@ -169,25 +169,51 @@ void setupLEDs() {
   ledPulseTime = millis() + ledPulseDelay;
 }
 
-void handleLEDs() {
+void setupVPSU() {
+  analogReference(PSU_FB_VREF);
+  analogReadResolution(12);
+}
+
+void handleStatus() {
+  holdingReg[0] = (status.PSUvoltage << 4) | (status.PSUError << 2) | (status.I2CError << 1) | status.modbusError;
+  uint32_t tempColour = statusLedColour;
+  if (status.PSUError || status.I2CError || status.modbusError) tempColour = LED_ERROR;
   if (millis() >= ledPulseTime) {
     if (ledState) leds.setPixelColor(0, LED_OFF);
-    else leds.setPixelColor(0, statusLedColour);
+    else leds.setPixelColor(0, tempColour);
     ledState = !ledState;
     leds.show();
     ledPulseTime += ledPulseDelay;
   }
 }
 
+void handleVPSU() {
+  int raw = analogRead(PIN_PS_FB);
+  float volts = raw * PSU_FB_RAW_TO_V;
+  if (volts > PSU_VOLTAGE_MAX || volts < PSU_VOLTAGE_MIN) status.PSUError = true;
+  else status.PSUError = false;
+  status.PSUvoltage = static_cast<uint16_t>(volts * 10);
+}
+
 void handleModbus() {
   if (!modbusInitialised  && !waitingForModbusConfig) return;
   int FC = bus.poll();
   if (FC == 0) {
-    if (!waitingForModbusConfig) commLedColour = LED_OK; // No Modbus request received, set LED to OK color
+    if (!waitingForModbusConfig) {
+      leds.setPixelColor(1, LED_OFF);
+      leds.show();
+    }
     return; // No Modbus request received
   }
-  commLedColour = LED_BUSY;
-  leds.setPixelColor(1, commLedColour);
+  if (FC < 0) {
+    Serial.printf("Modbus comm error\n");
+    status.modbusError = true;
+    leds.setPixelColor(1, LED_ERROR);
+    leds.show();
+    return; // Modbus error
+  }
+  status.modbusError = false;
+  leds.setPixelColor(1, LED_BUSY);
   leds.show();
   Serial.printf("Modbus request recieved, function code: %d\n", FC);
 
@@ -232,7 +258,7 @@ void handleModbus() {
   // Handle update to holding registers
   if (FC == MODBUS_FC06_WRITE_SINGLE_REGISTER || FC == MODBUS_FC16_WRITE_MULTIPLE_REGISTERS) {
     if (holdingReg[1] != modbusHolding.boardType) {
-      Serial.printf("----------> ERROR! Board type changed, changing back to 0x0002 <----------\n");
+      Serial.printf("----------> ERROR! Board type changed, changing back to 0x0002 <--------\n");
       holdingReg[1] = modbusHolding.boardType;  // Thermocouple IO board ID
     }
     modbus_holding_t holdingData;
@@ -349,6 +375,8 @@ void setup() {
 
   setupLEDs();
 
+  setupVPSU();
+
   Serial.printf("Loading configuration from EEPROM...\n");
   getConfig(); // Load configuration from EEPROM
 
@@ -366,11 +394,13 @@ void setup() {
 void loop() {
   readAll();
   handleModbus();
-  handleLEDs();
+  handleStatus();
+  handleVPSU();
   handleAddrBtn();
   saveHandler();
-  /*if (millis() >= slowLoopTime) {
-    tc[0].printConfig(); // Print the configuration of the first thermocouple
+
+  if (millis() >= slowLoopTime) {
     slowLoopTime += slowLoopDelay;
-  }*/
+    Serial.printf("VPSU: %d.%dV\n", status.PSUvoltage / 10, status.PSUvoltage % 10);
+  }
 }

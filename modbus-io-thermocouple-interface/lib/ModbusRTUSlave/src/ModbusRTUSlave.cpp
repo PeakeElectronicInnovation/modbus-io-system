@@ -143,6 +143,10 @@ int ModbusRTUSlave::poll() {
       }
     }
   }
+  if (_exceptionFlag) {
+    _exceptionFlag = false;
+    ret_val = -1;
+  }
   return ret_val;
 }
 
@@ -302,6 +306,7 @@ void ModbusRTUSlave::_exceptionResponse(uint8_t code) {
   _buf[1] |= 0x80;
   _buf[2] = code;
   _writeResponse(3);
+  _exceptionFlag = true;
 }
 
 

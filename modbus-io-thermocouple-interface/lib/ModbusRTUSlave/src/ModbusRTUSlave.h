@@ -58,6 +58,8 @@ class ModbusRTUSlave {
     uint32_t _charTimeout;
     uint32_t _frameTimeout;
 
+    bool _exceptionFlag = false;
+
     void _processReadCoils();
     void _processReadDiscreteInputs();
     void _processReadHoldingRegisters();
