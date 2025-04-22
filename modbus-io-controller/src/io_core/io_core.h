@@ -17,6 +17,7 @@ extern ModbusRTUMaster bus1;
 extern ModbusRTUMaster bus2;
 
 extern modbusConfig_t modbusConfig[2];
+extern thermocoupleIO_index_t thermocoupleIO_index;
 
 void init_io_core(void);
 void manage_io_core(void);

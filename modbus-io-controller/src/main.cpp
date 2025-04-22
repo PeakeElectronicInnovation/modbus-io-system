@@ -28,6 +28,7 @@ void setup1()
   log(LOG_INFO, false, "Core 1 setup complete\n");
   core1setupComplete = true;
   while (!core0setupComplete) delay(100);
+  log(LOG_INFO, true, "---------> System started successfully <---------\n");
 }
 
 // Core 0 - network and coordination

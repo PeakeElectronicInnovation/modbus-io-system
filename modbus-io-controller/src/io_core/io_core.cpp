@@ -12,8 +12,7 @@ modbusConfig_t modbusConfig[2] = {
 };
 
 deviceIndex_t deviceIndex[64];
-
-themocoupleIO_index_t thermocoupleIO_index;
+thermocoupleIO_index_t thermocoupleIO_index;
 
 void init_io_core(void) {
     Serial1.setTX(PIN_RS485_TX_1);

@@ -82,6 +82,6 @@ struct thermocoupleIO_t {
     float Vpsu = 0;
 };
   
-struct themocoupleIO_index_t {
+struct thermocoupleIO_index_t {
     thermocoupleIO_t tcIO[16];
 };
