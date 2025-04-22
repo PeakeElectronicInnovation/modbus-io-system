@@ -90,10 +90,10 @@ struct modbus_discrete_t {  // FC02
 } modbusFlag;
 
 struct modbus_holding_t {   // FC03/06/16
-    uint16_t slaveID = 245; // 0
+    uint16_t status = 0;    // 0
     const uint16_t boardType = 2; // 1 (0x0002 = Thermocouple IO board ID)
     char boardName[14];     // 2-8
-    uint16_t status = 0;    // 9
+    uint16_t slaveID = 0;   // 9
     uint16_t type[8];       // 10-17
     float alertSP[8];       // 18-33
     uint16_t alertHyst[8];  // 34-41

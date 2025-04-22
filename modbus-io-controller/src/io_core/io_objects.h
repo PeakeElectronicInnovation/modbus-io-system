@@ -4,10 +4,11 @@
 struct deviceIndex_t;
 
 enum deviceType_t {
+    MASTER_CONTROLLER,
+    ANALOGUE_DIGITAL_IO,
     THERMOCOUPLE_IO,
-    UNIVERSAL_IN,
-    DIGITAL_IO,
-    POWER_METER
+    RTD_IO,
+    ENERGY_METER
 };
 
 // Index object
@@ -16,6 +17,12 @@ struct deviceIndex_t {
     uint8_t index = 0;
     bool configured = false;
 };
+
+// Key standard holding register addresses
+#define EXP_HOLDING_REG_STATUS         0    // Status and board type are read only
+#define EXP_HOLDING_REG_BOARD_TYPE     1    // written data will be ignored
+#define EXP_HOLDING_REG_BOARD_NAME     2
+#define EXP_HOLDING_REG_SLAVE_ID       9
 
 // IO board objects defined here ----------------------->
 // *Device*_index_t -> *Device*_t -> *Device*_Modbus_t
@@ -40,10 +47,10 @@ struct thermocoupleModbus_t { // Thermocouple interface board modbus registers (
     bool shortCircuit[8];   // 24-31             | 56
 
     // FC03 - Read Holding Registers
-    uint16_t slaveID;       // 0                 | 64
+    uint16_t status;        // 0                 | 64
     uint16_t boardType;     // 1                 | 66
     char boardName[14];     // 2-8               | 68
-    uint16_t status;        // 9                 | 82
+    uint16_t slaveID;       // 9                 | 82
     uint16_t type[8];       // 10-17             | 84
     float alertSP[8];       // 18-33             | 100
     uint16_t alarmHyst[8];  // 34-41             | 132
@@ -53,6 +60,12 @@ struct thermocoupleModbus_t { // Thermocouple interface board modbus registers (
     float coldJunction[8];  // 16-31             | 180
     float deltaJunction[8]; // 32-47             | 212 -> 244
 };
+
+// TCIO specific holding register addresses
+#define TCIO_HOLDING_REG_TYPE           10
+#define TCIO_HOLDING_REG_ALERT_SP       18
+#define TCIO_HOLDING_REG_ALARM_HYST     34
+
 struct thermocoupleIO_t {
     ModbusRTUMaster *bus;
     uint8_t slaveID;
@@ -62,7 +75,8 @@ struct thermocoupleIO_t {
     uint32_t pollTime;
     thermocoupleModbus_t reg;
     bool coils[32];
-    uint16_t holdingRegisters[42];
+    uint16_t holdingRegisters[40]; // first 2 registers are excluded!!! read only
+    bool configInitialised = false;
 };
   
 struct themocoupleIO_index_t {

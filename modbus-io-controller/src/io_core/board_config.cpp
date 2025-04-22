@@ -254,7 +254,6 @@ void handleGetBoardConfig() {
 
     // If there are no boards, return an empty array
     if (boardCount == 0) {
-        log(LOG_INFO, true, "No boards configured, returning empty array\n");
         server.send(200, "application/json", "{\"boards\":[]}");
         return;
     }
@@ -277,6 +276,7 @@ void handleGetBoardConfig() {
         board["modbus_port"] = boardConfigs[i].modbusPort;
         board["poll_time"] = boardConfigs[i].pollTime;
         board["initialised"] = boardConfigs[i].initialised; // Add initialization status
+        board["connected"] = boardConfigs[i].connected; // Add connection status
         
         // Add board-specific settings based on type
         if (boardConfigs[i].type == THERMOCOUPLE_IO) {
@@ -370,6 +370,7 @@ void handleAddBoard() {
     newBoard.modbusPort = modbusPort;
     newBoard.pollTime = pollTime;
     newBoard.initialised = false; // New boards are not initialised by default
+    newBoard.connected = false; // New boards are not connected by default
     
     // Handle board type specific settings
     if (type == THERMOCOUPLE_IO) {
@@ -586,7 +587,6 @@ void handleGetAllBoards() {
     
     // If there are no boards, return an empty array
     if (boardCount == 0) {
-        log(LOG_INFO, true, "No boards configured, returning empty array\n");
         server.send(200, "application/json", "{\"boards\":[]}");
         return;
     }
@@ -609,6 +609,7 @@ void handleGetAllBoards() {
         board["modbus_port"] = boardConfigs[i].modbusPort;
         board["poll_time"] = boardConfigs[i].pollTime;
         board["initialised"] = boardConfigs[i].initialised; // Add initialization status
+        board["connected"] = boardConfigs[i].connected; // Add connection status
         
         // Add board-specific settings based on type
         if (boardConfigs[i].type == THERMOCOUPLE_IO) {
@@ -650,6 +651,7 @@ bool addBoard(BoardConfig newBoard) {
     // Set a default value for the initialised field
     // New boards are not initialised by default
     newBoard.initialised = false;
+    newBoard.connected = false;
     
     // Set board index and copy to our array
     newBoard.boardIndex = boardCount;
@@ -753,14 +755,14 @@ uint8_t assignSlaveID(uint8_t modbusPort) {
 // Helper function to get device type name
 const char* getDeviceTypeName(deviceType_t type) {
     switch (type) {
+        case ANALOGUE_DIGITAL_IO:
+            return "Analogue/Digital IO";
         case THERMOCOUPLE_IO:
             return "Thermocouple IO";
-        case UNIVERSAL_IN:
-            return "Universal Input";
-        case DIGITAL_IO:
-            return "Digital IO";
-        case POWER_METER:
-            return "Power Meter";
+        case RTD_IO:
+            return "RTD IO";
+        case ENERGY_METER:
+            return "Energy Meter";
         default:
             return "Unknown";
     }

@@ -913,16 +913,18 @@ let editingBoardIndex = null;
 // Function to convert board type string to enum value
 function getBoardTypeValue(boardType) {
     switch (boardType) {
-        case 'THERMOCOUPLE_IO':
+        case 'CONTROLLER_IO':
             return 0;
-        case 'UNIVERSAL_IN':
+        case 'ANALOGUE_DIGITAL_IO':
             return 1;
-        case 'DIGITAL_IO':
+        case 'THERMOCOUPLE_IO':
             return 2;
-        case 'POWER_METER':
+        case 'RTD_IO':
             return 3;
+        case 'ENERGY_METER':
+            return 4;
         default:
-            return 0; // Default to thermocouple
+            return 0; // Default to master controller
     }
 }
 
@@ -1277,12 +1279,19 @@ function renderSingleBoard(board, index, container) {
     const initStatus = board.initialised ? 'Initialised' : 'Not Initialised';
     const initStatusClass = board.initialised ? 'init-status-ok' : 'init-status-pending';
     
+    // Determine connection status
+    const connectStatus = board.connected ? 'Online' : 'Offline';
+    const connectStatusClass = board.connected ? 'connect-status-ok' : 'connect-status-error';
+    
     // Create the board item HTML
     boardItem.innerHTML = `
         <div class="board-info">
             <span class="board-type">${board.name || 'Unnamed Board'}</span>
             <span class="board-details">Type: ${boardTypeName}, Port: ${portDisplay}</span>
-            <span class="board-init-status ${initStatusClass}">Status: ${initStatus}</span>
+            <div class="board-status-container">
+                <span class="board-init-status ${initStatusClass}">Status: ${initStatus}</span>
+                <span class="board-connect-status ${connectStatusClass}">Connection: ${connectStatus}</span>
+            </div>
         </div>
         <div class="board-actions">
             <button class="btn-edit" data-index="${index}"><i class="fas fa-edit"></i> Edit</button>
@@ -1328,6 +1337,7 @@ function showBoardConfigForm(editIndex = null) {
     const formTitle = document.getElementById('formTitle');
     
     if (editIndex !== null) {
+        console.log(`Editing board index ${editIndex}`);
         // Edit existing board
         editingBoardIndex = editIndex;
         const board = boardConfigurations[editIndex];
@@ -1341,16 +1351,19 @@ function showBoardConfigForm(editIndex = null) {
         // Convert numeric type to string type for the dropdown
         switch (board.type) {
             case 0:
-                typeSelectElement.value = 'THERMOCOUPLE_IO';
+                typeSelectElement.value = 'CONTROLLER_IO';
                 break;
             case 1:
-                typeSelectElement.value = 'UNIVERSAL_IN';
+                typeSelectElement.value = 'ANALOGUE_DIGITAL_IO';
                 break;
             case 2:
-                typeSelectElement.value = 'DIGITAL_IO';
+                typeSelectElement.value = 'THERMOCOUPLE_IO';
                 break;
             case 3:
-                typeSelectElement.value = 'POWER_METER';
+                typeSelectElement.value = 'RTD_IO';
+                break;
+            case 4:
+                typeSelectElement.value = 'ENERGY_METER';
                 break;
             default:
                 typeSelectElement.value = 'THERMOCOUPLE_IO'; // Default to thermocouple
@@ -1364,7 +1377,7 @@ function showBoardConfigForm(editIndex = null) {
         showBoardTypeSettings(typeSelectElement.value);
         
         // Fill board type specific settings
-        if (board.type === 0) { // THERMOCOUPLE_IO
+        if (board.type === 2) { // THERMOCOUPLE_IO
             // Fill channel settings
             if (board.channels && Array.isArray(board.channels)) {
                 board.channels.forEach((channel, index) => {
@@ -1380,6 +1393,7 @@ function showBoardConfigForm(editIndex = null) {
         }
         // Add more board types as needed
     } else {
+        console.log("Adding new board");
         // Add new board
         editingBoardIndex = null;
         

@@ -6,9 +6,6 @@
 // Forward declarations to avoid circular dependencies
 struct BoardConfig;
 
-// Common defines
-#define MODBUS_HOLDING_REG_SLAVE_ID 0
-
 // Top level structs
 struct modbusConfig_t {
     ModbusRTUMaster *bus;
@@ -31,7 +28,9 @@ bool apply_thermocouple_config(BoardConfig* config);
 uint8_t findFreeDeviceIndex(void);
 
 // Board specific handlers
+void manage_analogue_digital_io(uint8_t index);
 void manage_thermocouple(uint8_t index);
-void manage_universal_in(uint8_t index);
-void manage_digital_io(uint8_t index);
-void manage_power_meter(uint8_t index);
+bool setup_thermocouple(uint8_t index);
+void manage_rtd(uint8_t index);
+void manage_energy_meter(uint8_t index);
+void print_board_config(uint8_t index);

@@ -130,17 +130,17 @@ void manage_io_core(void) {
             }
             
             switch (deviceIndex[i].type) {
+                case ANALOGUE_DIGITAL_IO:
+                    manage_analogue_digital_io(deviceIndex[i].index);
+                    break;
                 case THERMOCOUPLE_IO:
                     manage_thermocouple(deviceIndex[i].index);
                     break;
-                case UNIVERSAL_IN:
-                    manage_universal_in(deviceIndex[i].index);
+                case RTD_IO:
+                    manage_rtd(deviceIndex[i].index);
                     break;
-                case DIGITAL_IO:
-                    manage_digital_io(deviceIndex[i].index);
-                    break;
-                case POWER_METER:
-                    manage_power_meter(deviceIndex[i].index);
+                case ENERGY_METER:
+                    manage_energy_meter(deviceIndex[i].index);
                     break;
             }
         }
@@ -157,7 +157,7 @@ uint8_t assign_address(modbusConfig_t *busCfg) {
     for (uint8_t i = 1; i < 243; i++) {
         if (!busCfg->idAssigned[i]) {
             // Assign address to device
-            if (busCfg->bus->writeSingleHoldingRegister(245, MODBUS_HOLDING_REG_SLAVE_ID, i)) {
+            if (busCfg->bus->writeSingleHoldingRegister(245, EXP_HOLDING_REG_SLAVE_ID, i)) {
                 busCfg->idAssigned[i] = true;
                 log(LOG_INFO, true, "Assigned address %d to device\n", i);
                 return i;
@@ -170,20 +170,49 @@ uint8_t assign_address(modbusConfig_t *busCfg) {
     return 0; // No free addresses available
 }
 
+void manage_analogue_digital_io(uint8_t index) {
+}
+
 void manage_thermocouple(uint8_t index) {
+    if (!thermocoupleIO_index.tcIO[index].configInitialised) {
+        if (!setup_thermocouple(index)) {
+            log(LOG_ERROR, true, "Failed to setup thermocouple board configuration registers at index %d\n", index);
+            getBoard(index)->initialised = false;
+            return;
+        }
+        thermocoupleIO_index.tcIO[index].configInitialised = true;
+        return;
+    }
     // Check if polling time has elapsed
     if(millis() - thermocoupleIO_index.tcIO[index].lastUpdate < thermocoupleIO_index.tcIO[index].pollTime) return;
     thermocoupleIO_index.tcIO[index].lastUpdate = millis();
+    log(LOG_DEBUG, false, "Polling thermocouple board at index %d\n", index);
+
+    // Check board is online
+    uint16_t buf[1];
+    if (!thermocoupleIO_index.tcIO[index].bus->readHoldingRegisters(thermocoupleIO_index.tcIO[index].slaveID, EXP_HOLDING_REG_BOARD_TYPE, buf, 1)) {
+        if (getBoard(index)->connected == true) {
+            log(LOG_ERROR, true, "Board at index %d is offline\n", index);
+            getBoard(index)->connected = false;
+        }
+        return;
+    }
+    if (deviceType_t(buf[0]) != THERMOCOUPLE_IO) {
+        log(LOG_ERROR, true, "Board at index %d is not a thermocouple board. Type: %d, %s\n", index, buf[0], getDeviceTypeName(deviceType_t(buf[0])));
+        return;
+    }
+    getBoard(index)->connected = true;
+    log(LOG_DEBUG, false, "Board at index %d is online\n", index);
 
     // Register buffers
     bool coils[32];
     bool discreteInputs[32];
-    uint16_t holdingRegisters[42];
+    uint16_t holdingRegisters[40];
     uint16_t inputRegisters[48];
 
     // Load Coil and Holding Register buffers with current config values
     memcpy(coils, &thermocoupleIO_index.tcIO[index].reg, sizeof(coils));
-    memcpy(holdingRegisters, &thermocoupleIO_index.tcIO[index].reg.slaveID, sizeof(holdingRegisters));
+    memcpy(holdingRegisters, &thermocoupleIO_index.tcIO[index].reg.boardName, sizeof(holdingRegisters));
     bool changed = false;
 
     // Check for changes to writable registers and write if changed
@@ -196,16 +225,29 @@ void manage_thermocouple(uint8_t index) {
         }
     }
     if (changed) {
-        if(thermocoupleIO_index.tcIO[index].bus->writeMultipleCoils(thermocoupleIO_index.tcIO[index].slaveID, 0x0000, coils, 32)) {
-            log(LOG_INFO, true, "Thermocouple board at index %d coils written successfully\n", index);
-        } else {
-            log(LOG_ERROR, true, "Thermocouple board at index %d coils write failed\n", index);
+        int retries = 0;
+        while (retries < 3) {
+            if(thermocoupleIO_index.tcIO[index].bus->writeMultipleCoils(thermocoupleIO_index.tcIO[index].slaveID, 0x0000, coils, 32)) {
+                log(LOG_INFO, true, "Thermocouple board at index %d coils written successfully\n", index);
+                break;
+            } else {
+                log(LOG_ERROR, true, "Thermocouple board at index %d coils write failed\n", index);
+            }
+            retries++;
+            delay(100); // Wait before retrying
+        }
+        if (retries == 3) {
+            log(LOG_ERROR, true, "Thermocouple board at index %d coils write failed after 3 retries\n", index);
+            getBoard(index)->connected = false;
+            thermocoupleIO_index.tcIO[index].configInitialised = false;
+            return;
         }
         changed = false;
     }
 
     // Holding registers ----->
-    for (int i = 0; i < 42; i++) {
+    for (int i = 0; i < 40; i++) {
+        if (i == EXP_HOLDING_REG_BOARD_TYPE) continue; // Skip board type register (read only!)
         if (thermocoupleIO_index.tcIO[index].holdingRegisters[i] != holdingRegisters[i]) {
             thermocoupleIO_index.tcIO[index].holdingRegisters[i] = holdingRegisters[i];
             changed = true;
@@ -215,7 +257,7 @@ void manage_thermocouple(uint8_t index) {
     if (changed) {
         int retries = 0;
         while (retries < 3) {
-            if(thermocoupleIO_index.tcIO[index].bus->writeMultipleHoldingRegisters(thermocoupleIO_index.tcIO[index].slaveID, 0x0000, holdingRegisters, 42)) {
+            if(thermocoupleIO_index.tcIO[index].bus->writeMultipleHoldingRegisters(thermocoupleIO_index.tcIO[index].slaveID, EXP_HOLDING_REG_BOARD_NAME, holdingRegisters, 40)) {
                 log(LOG_INFO, true, "Holding registers written successfully\n");
                 break;
             } else {
@@ -225,6 +267,9 @@ void manage_thermocouple(uint8_t index) {
             }
         } if (retries == 3) {
             log(LOG_ERROR, true, "Thermocouple board at index %d holding registers write failed after 3 retries\n", index);
+            getBoard(index)->connected = false;
+            thermocoupleIO_index.tcIO[index].configInitialised = false;
+            return;
         }
     }
 
@@ -243,11 +288,46 @@ void manage_thermocouple(uint8_t index) {
     memcpy(&thermocoupleIO_index.tcIO[index].reg.temperature, inputRegisters, sizeof(inputRegisters));
 }
 
-void manage_universal_in(uint8_t index) {
+bool setup_thermocouple(uint8_t index) {
+    uint16_t holdingRegisters[40];
+    bool coils[32];
+    memcpy(holdingRegisters, &thermocoupleIO_index.tcIO[index].reg.boardName, sizeof(holdingRegisters));
+    memcpy(coils, &thermocoupleIO_index.tcIO[index].reg, sizeof(coils));
+
+    // Attempt to load holding registers (excluding first 2 registers)
+    if (!thermocoupleIO_index.tcIO[index].bus->writeMultipleHoldingRegisters(thermocoupleIO_index.tcIO[index].slaveID, EXP_HOLDING_REG_BOARD_NAME, holdingRegisters, 40)) {
+        log(LOG_ERROR, true, "Failed to write holding register config to thermocouple IO board at index %d\n", index);
+        return false;
+    }
+    // Copy holding registers to local buffer
+    memcpy(thermocoupleIO_index.tcIO[index].holdingRegisters, holdingRegisters, sizeof(holdingRegisters));
+
+    // Attempt to load coils
+    if (!thermocoupleIO_index.tcIO[index].bus->writeMultipleCoils(thermocoupleIO_index.tcIO[index].slaveID, 0x0000, coils, 32)) {
+        log(LOG_ERROR, true, "Failed to write coil register config to thermocouple IO board at index %d\n", index);
+        return false;
+    }
+    // Copy coils to local buffer
+    memcpy(thermocoupleIO_index.tcIO[index].coils, coils, sizeof(coils));
+    return true;
 }
 
-void manage_digital_io(uint8_t index) {
+void manage_rtd(uint8_t index) {
 }
 
-void manage_power_meter(uint8_t index) {
+void manage_energy_meter(uint8_t index) {
+}
+
+void print_board_config(uint8_t index) {
+    if (index >= boardCount) {
+        log(LOG_ERROR, false, "Invalid board index: %d\n", index);
+        return;
+    }
+    log(LOG_INFO, false, "Board at index %d configured as %s\n", index, getDeviceTypeName(getBoard(index)->type));
+    log(LOG_INFO, false, "Board name: %s\n", getBoard(index)->boardName);
+    log(LOG_INFO, false, "Slave ID: %d\n", getBoard(index)->slaveID);
+    log(LOG_INFO, false, "Modbus port: %d\n", getBoard(index)->modbusPort);
+    log(LOG_INFO, false, "Poll time: %d\n", getBoard(index)->pollTime);
+    log(LOG_INFO, false, "Initialised: %s\n", getBoard(index)->initialised ? "Yes" : "No");
+    log(LOG_INFO, false, "Connected: %s\n", getBoard(index)->connected ? "Yes" : "No");
 }

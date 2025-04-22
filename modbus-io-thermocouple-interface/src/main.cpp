@@ -73,14 +73,14 @@ void getConfig() {
     modbusOutSet.alertEdge[i] = tcConfig[i].alertEdge;
     modbusOutSet.outputEnable[i] = tcConfig[i].outputEnable;
 
-    memcpy(holdingReg, &modbusHolding, sizeof(modbusHolding));
-    memcpy(coil, &modbusOutSet, sizeof(modbusOutSet));
-
     // Debug print
     Serial.printf("Type: %d, SD: ", modbusHolding.type[i]);
     Serial.print(modbusHolding.alertSP[i]);
     Serial.printf(", Hyst: %d, Enable: %d, Latch: %d, Edge: %d, Output Enable: %d\n", modbusHolding.alertHyst[i], modbusOutSet.alertEnable[i], modbusOutSet.alertLatch[i], modbusOutSet.alertEdge[i], modbusOutSet.outputEnable[i]);
   }
+  Serial.printf("modbusHolding.boardType: %d\n", modbusHolding.boardType);
+  memcpy(holdingReg, &modbusHolding, sizeof(holdingReg));
+  memcpy(coil, &modbusOutSet, sizeof(coil));
 }
 
 void setupModbus() {
@@ -231,17 +231,24 @@ void handleModbus() {
 
   // Handle update to holding registers
   if (FC == MODBUS_FC06_WRITE_SINGLE_REGISTER || FC == MODBUS_FC16_WRITE_MULTIPLE_REGISTERS) {
+    if (holdingReg[1] != modbusHolding.boardType) {
+      Serial.printf("----------> ERROR! Board type changed, changing back to 0x0002 <----------\n");
+      holdingReg[1] = modbusHolding.boardType;  // Thermocouple IO board ID
+    }
     modbus_holding_t holdingData;
     memcpy(&holdingData, holdingReg, sizeof(modbus_holding_t));
     for (int i = 0; i < 8; i++) {
+      // Thermocouple Type change check, validate and apply
       if ((holdingData.type[i] <= 7) && (holdingData.type[i] != modbusHolding.type[i])) {
         changed = true;
         Serial.printf("Thermocouple %d type changed to %d\n", i, holdingData.type[i]);
         modbusHolding.type[i] = holdingData.type[i];
         tcConfig[i].type = holdingData.type[i];
-        tc[i].setType(static_cast<MCP960x_type_t>(modbusHolding.type[i])); // Set the configuration for each MCP960x
+        tc[i].setType(static_cast<MCP960x_type_t>(modbusHolding.type[i]));
         changed = true;
-      }
+      } // ------------------------------------------------------------
+
+      // Thermocouple alert setpoint change check, validate and apply
       if ((holdingData.alertSP[i] < 1500.0) && (holdingData.alertSP[i] > -40.0) && (holdingData.alertSP[i] != modbusHolding.alertSP[i])) {
         changed = true;
         Serial.printf("Thermocouple %d SP changed to ", i);
@@ -250,7 +257,9 @@ void handleModbus() {
         tcConfig[i].alertSP = holdingData.alertSP[i];
         tc[i].setAlertSP(0, modbusHolding.alertSP[i]);
         changed = true;
-      }
+      } // ------------------------------------------------------------
+
+      // Thermocouple alert hysteresis change check, validate and apply
       if (holdingData.alertHyst[i] != modbusHolding.alertHyst[i]) {
         changed = true;
         Serial.printf("Thermocouple %d Hyst changed to %d\n", i, holdingData.alertHyst[i]);
@@ -258,7 +267,9 @@ void handleModbus() {
         tcConfig[i].alertHyst = holdingData.alertHyst[i];
         tc[i].setAlertHyst(0, modbusHolding.alertHyst[i]);
         changed = true;
-      }
+      } // ------------------------------------------------------------
+
+      // Modbus slave ID change check, validate and apply
       if ((holdingData.slaveID != modbusHolding.slaveID) && (holdingData.slaveID > 0)) {
         if ((holdingData.slaveID > 244) || (holdingData.slaveID < 1)) {
           modbusHolding.slaveID = 245;
@@ -276,7 +287,16 @@ void handleModbus() {
           Serial.println("Modbus configuration complete!");
         }
         changed = true;
-      }        
+      } // ------------------------------------------------------------
+
+      // Modbus board name change check, validate and apply
+      if (strlen(holdingData.boardName) > 0) {
+        if (strcmp(holdingData.boardName, modbusHolding.boardName) != 0) {
+          strncpy(modbusHolding.boardName, holdingData.boardName, sizeof(modbusHolding.boardName));
+          modbusHolding.boardName[sizeof(modbusHolding.boardName) - 1] = '\0'; // Ensure null termination
+          changed = true;
+        }
+      } // ------------------------------------------------------------
     }
   }
   if (changed) {
