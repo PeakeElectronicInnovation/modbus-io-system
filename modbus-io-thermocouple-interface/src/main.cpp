@@ -34,27 +34,26 @@ void getConfig() {
     saveConfig();
     EEPROM.write(EEPROM_VALID_ADDR, EEPROM_VALID_VALUE);
     Serial.println("Default configuration saved to EEPROM.");
-    return;
-  }
-
-  // Load configuration from EEPROM
-  Serial.println("Loading previously saved configuration from EEPROM...");
-  // Slave ID:
-  EEPROM.get(EEPROM_MODBUSCFG_ADDR, modbusHolding.slaveID);
-  if (modbusHolding.slaveID < 245) {
-    modbusInitialised = true;
-    statusLedColour = LED_OK;
-    Serial.printf("Modbus slave ID: %d\n", modbusHolding.slaveID);
   } else {
-    statusLedColour = LED_UNCONFIGURED;
-    Serial.printf("Modbus unconfigured\n");
-  }
-  // Board name:
-  EEPROM.get(EEPROM_BOARDNAME_ADDR, modbusHolding.boardName);
-  Serial.printf("Board name: %s\n", modbusHolding.boardName);
-  // Thermocouple config:
-  for(int i = 0; i < 8; i++) {
-    EEPROM.get(EEPROM_CONFIG_ADDR + (i * sizeof(tc_config_t)), tcConfig[i]);
+     // Load configuration from EEPROM
+    Serial.println("Loading previously saved configuration from EEPROM...");
+    // Slave ID:
+    EEPROM.get(EEPROM_MODBUSCFG_ADDR, modbusHolding.slaveID);
+    if (modbusHolding.slaveID < 245 && modbusHolding.slaveID > 0) {
+      modbusInitialised = true;
+      statusLedColour = LED_OK;
+      Serial.printf("Modbus slave ID: %d\n", modbusHolding.slaveID);
+    } else {
+      statusLedColour = LED_UNCONFIGURED;
+      Serial.printf("Modbus unconfigured\n");
+    }
+    // Board name:
+    EEPROM.get(EEPROM_BOARDNAME_ADDR, modbusHolding.boardName);
+    Serial.printf("Board name: %s\n", modbusHolding.boardName);
+    // Thermocouple config:
+    for(int i = 0; i < 8; i++) {
+      EEPROM.get(EEPROM_CONFIG_ADDR + (i * sizeof(tc_config_t)), tcConfig[i]);
+    }
   }
 
   // Store config to tc structs and modbus registers
@@ -81,6 +80,7 @@ void getConfig() {
   Serial.printf("modbusHolding.boardType: %d\n", modbusHolding.boardType);
   memcpy(holdingReg, &modbusHolding, sizeof(holdingReg));
   memcpy(coil, &modbusOutSet, sizeof(coil));
+  Serial.printf("After memcpy holdingReg[1]: %d\n", holdingReg[1]);
 }
 
 void setupModbus() {
@@ -96,6 +96,7 @@ void setupModbus() {
     commLedColour = LED_OFF;
     Serial.println("Modbus not configured, hold Address button for 3 seconds to start configuration.");
   }
+  Serial.printf("After setupModbus holdingReg[1]: %d\n", holdingReg[1]);
 }
 
 void setupThermocoupleInterface() {
@@ -307,10 +308,11 @@ void handleModbus() {
           Serial.printf("Modbus slave ID changed to %d\n", modbusHolding.slaveID);
           bus.begin(modbusHolding.slaveID, 500000);
           modbusInitialised = true;
+          statusLedColour = LED_OK;
         }
         if (waitingForModbusConfig) {
           waitingForModbusConfig = false;
-          Serial.println("Modbus configuration complete!");
+          Serial.println("Modbus initialisation complete!");
         }
         changed = true;
       } // ------------------------------------------------------------
@@ -320,6 +322,7 @@ void handleModbus() {
         if (strcmp(holdingData.boardName, modbusHolding.boardName) != 0) {
           strncpy(modbusHolding.boardName, holdingData.boardName, sizeof(modbusHolding.boardName));
           modbusHolding.boardName[sizeof(modbusHolding.boardName) - 1] = '\0'; // Ensure null termination
+          Serial.printf("Modbus board name changed to %s\n", modbusHolding.boardName);
           changed = true;
         }
       } // ------------------------------------------------------------
@@ -352,7 +355,8 @@ void handleAddrBtn() {
     }
     if (addrBtnPressed && ((millis() - addrBtnTime) < 2000)) return;
     waitingForModbusConfig = true;
-    bus.begin(245, 500000); // Set Modbus address to 245
+    modbusHolding.slaveID = 245;
+    bus.begin(245, 500000);
     leds.setPixelColor(1, LED_UNCONFIGURED);
     leds.show();
     Serial.println("Modbus address set to 245, waiting for configuration.");
@@ -386,6 +390,8 @@ void setup() {
   Serial.printf("Starting thermocouple interface 1...\n");
   setupThermocoupleInterface();
   readAll();
+
+  Serial.printf("Modbus is %sinitialised\n", modbusInitialised ? "" : "not ");
 
   Serial.println("Done!");
   slowLoopTime = millis() + slowLoopDelay;

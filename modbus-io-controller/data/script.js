@@ -1802,3 +1802,619 @@ async function initialiseBoard(index) {
         showToast('error', 'Error', `Failed to initialise board. ${error.message || ''} Ensure the board is in Address Assignment Mode (blue LED lit).`);
     }
 }
+
+// Board Status Page Functionality
+let boardStatusChart = null;
+let selectedBoardId = null;
+let statusRefreshInterval = null;
+
+// Client-side data storage for temperature history (replacing server-side history)
+const CLIENT_HISTORY_MAX_POINTS = 360; // Maximum number of data points to store (360 points = 30 minutes with 5s refresh)
+let clientTemperatureHistory = {
+    timestamps: [],
+    channels: []
+};
+
+// Chart colors for different channels
+const chartColors = [
+    'rgb(54, 162, 235)',  // Blue
+    'rgb(255, 99, 132)',  // Red
+    'rgb(255, 205, 86)',  // Yellow
+    'rgb(75, 192, 192)',  // Teal
+    'rgb(153, 102, 255)', // Purple
+    'rgb(255, 159, 64)',  // Orange
+    'rgb(201, 203, 207)', // Grey
+    'rgb(99, 255, 132)'   // Green
+];
+
+// Lookup table for thermocouple types
+const thermocoupleLookup = {
+    0: 'K',
+    1: 'J',
+    2: 'T',
+    3: 'E',
+    4: 'N',
+    5: 'S',
+    6: 'B',
+    7: 'R'
+};
+
+// Initialize the board status page
+function initBoardStatusPage() {
+    console.log('Initializing board status page');
+    
+    // Clear any existing interval
+    if (statusRefreshInterval) {
+        clearInterval(statusRefreshInterval);
+    }
+    
+    // Load the board list
+    loadBoardStatusList();
+    
+    // Set up the board selector change event
+    const boardSelector = document.getElementById('statusBoardSelect');
+    if (boardSelector) {
+        boardSelector.addEventListener('change', function() {
+            selectedBoardId = this.value;
+            if (selectedBoardId) {
+                loadBoardStatus(selectedBoardId);
+            }
+        });
+    }
+    
+    // Start the refresh interval (every 5 seconds)
+    statusRefreshInterval = setInterval(refreshBoardStatus, 5000);
+}
+
+// Load the list of boards for the status page
+async function loadBoardStatusList() {
+    try {
+        const response = await fetch('/api/status');
+        
+        if (!response.ok) {
+            throw new Error(`HTTP error! status: ${response.status}`);
+        }
+        
+        const data = await response.json();
+        const boardSelector = document.getElementById('statusBoardSelect');
+        const noBoardsMessage = document.getElementById('noBoardsStatus');
+        const boardStatusContent = document.getElementById('boardStatusContent');
+        
+        // Clear existing options
+        boardSelector.innerHTML = '';
+        
+        // Check if we have boards
+        if (data.boards && data.boards.length > 0) {
+            // Add options for each board
+            data.boards.forEach(board => {
+                if (board.connected) {
+                    const option = document.createElement('option');
+                    option.value = board.id;
+                    option.textContent = `${board.name} (${board.type})`;
+                    boardSelector.appendChild(option);
+                }
+            });
+            
+            // Hide no boards message
+            noBoardsMessage.style.display = 'none';
+            
+            // If we have at least one board, select it and load its status
+            if (boardSelector.options.length > 0) {
+                boardSelector.selectedIndex = 0;
+                selectedBoardId = boardSelector.value;
+                boardStatusContent.style.display = 'block';
+                loadBoardStatus(selectedBoardId);
+            } else {
+                // No connected boards
+                noBoardsMessage.style.display = 'block';
+                boardStatusContent.style.display = 'none';
+            }
+        } else {
+            // No boards configured
+            noBoardsMessage.style.display = 'block';
+            boardStatusContent.style.display = 'none';
+        }
+    } catch (error) {
+        console.error('Error loading board status list:', error);
+        showToast('error', 'Error', 'Failed to load board list');
+    }
+}
+
+// Load the status of a specific board
+async function loadBoardStatus(boardId) {
+    try {        
+        const response = await fetch(`/api/status/board?id=${boardId}`);
+        
+        if (!response.ok) {
+            throw new Error(`HTTP error! status: ${response.status}`);
+        }
+        
+        const board = await response.json();
+        console.log('Board status data:', board); // Debug the full API response
+        
+        // Update board information with better null/undefined checking
+        document.getElementById('boardInfoName').textContent = board.name || 'Not specified';
+        document.getElementById('boardInfoType').textContent = board.type || 'Unknown type';        
+        document.getElementById('boardInfoConnectionStatus').textContent = board.connected ? 'Connected' : 'Disconnected';
+        document.getElementById('boardInfoSlaveId').textContent = board.slave_id || 'N/A';
+        document.getElementById('boardInfoModbusPort').textContent = board.modbus_port !== undefined ? `Port ${board.modbus_port + 1}` : 'N/A';
+        document.getElementById('boardInfoPollTime').textContent = board.poll_time ? `${board.poll_time} ms` : 'N/A';
+        
+        // Handle board type specific content
+        if (board.type === 'Thermocouple IO') {
+            document.getElementById('thermocoupleContent').style.display = 'block';
+            document.getElementById('thermocoupleOverview').style.display = 'block';
+            
+            // Check if thermocouple data exists
+            if (!board.thermocouple) {
+                console.error('Thermocouple data missing from API response');
+                showToast('error', 'Error', 'Failed to load thermocouple data');
+                return;
+            }
+            
+            // Update error indicators (check if errors object exists)
+            if (board.thermocouple.errors) {
+                updateErrorIndicator('modbusError', board.thermocouple.errors.modbus);
+                updateErrorIndicator('i2cError', board.thermocouple.errors.i2c);
+                updateErrorIndicator('psuError', board.thermocouple.errors.psu);
+            } else {
+                console.warn('Error indicators missing in API response');
+            }
+            
+            // Update PSU voltage
+            document.getElementById('psuVoltage').textContent = 
+                (board.thermocouple.psu_voltage !== undefined) 
+                ? `${board.thermocouple.psu_voltage.toFixed(2)}V` 
+                : 'N/A';
+            
+            // Check if channels exist before updating
+            if (board.thermocouple.channels && Array.isArray(board.thermocouple.channels)) {
+                updateThermocoupleChannels(board.thermocouple.channels);
+                
+                // Update temperature history with current data
+                updateClientTemperatureHistory(board.thermocouple.channels);
+                
+                // Update chart with accumulated temperature data
+                updateTemperatureChart(clientTemperatureHistory);
+            } else {
+                console.error('Thermocouple channel data missing or invalid');
+                document.getElementById('channelCards').innerHTML = 
+                    '<p class="no-boards-message">No thermocouple channel data available</p>';
+            }
+        } else {
+            // Hide thermocouple content for other board types
+            document.getElementById('thermocoupleContent').style.display = 'none';
+            document.getElementById('thermocoupleOverview').style.display = 'none';
+        }
+    } catch (error) {
+        console.error('Error loading board status:', error);
+        showToast('error', 'Error', 'Failed to load board status');
+    }
+}
+
+// Refresh the current board status
+function refreshBoardStatus() {
+    if (selectedBoardId && document.getElementById('board-status').classList.contains('active')) {
+        loadBoardStatus(selectedBoardId);
+    }
+}
+
+// Update an error indicator element
+function updateErrorIndicator(elementId, hasError) {
+    const element = document.getElementById(elementId);
+    if (element) {
+        element.textContent = hasError ? 'Error' : 'OK';
+        element.className = 'error-state ' + (hasError ? 'error' : 'ok');
+    }
+}
+
+// Update the thermocouple channel cards
+function updateThermocoupleChannels(channels) {
+    const channelCardsContainer = document.getElementById('channelCards');
+    channelCardsContainer.innerHTML = '';
+    
+    if (!channels || !Array.isArray(channels) || channels.length === 0) {
+        channelCardsContainer.innerHTML = '<p class="no-boards-message">No channel data available</p>';
+        return;
+    }
+    
+    // Make sure we display all channels (0-7, displayed as 1-8)
+    for (let i = 0; i < 8; i++) {
+        // Find channel with this number
+        const channel = channels.find(ch => ch && ch.number === i);
+        
+        // If channel doesn't exist, create a placeholder with basic data
+        if (!channel) {
+            console.log(`Channel ${i} (display as ${i+1}) not found in data, creating placeholder`);
+            
+            const card = document.createElement('div');
+            card.className = 'channel-card';
+            
+            card.innerHTML = `
+                <div class="channel-card-header">
+                    <span class="channel-title">Channel ${i + 1}</span>
+                    <span class="channel-temp">N/A</span>
+                </div>
+                <div class="channel-details">
+                    <div class="detail-item">
+                        <span class="info-label">Type:</span>
+                        <span class="info-value">Unknown</span>
+                    </div>
+                    <div class="detail-item">
+                        <span class="info-label">Setpoint:</span>
+                        <span class="info-value">N/A</span>
+                    </div>
+                    <div class="detail-item">
+                        <span class="info-label">Hysteresis:</span>
+                        <span class="info-value">N/A</span>
+                    </div>
+                    <div class="detail-item">
+                        <span class="info-label">Cold Junction:</span>
+                        <span class="info-value">N/A</span>
+                    </div>
+                </div>
+                <div class="channel-status-indicators">
+                    <span class="channel-status-indicator disabled">No Data</span>
+                </div>
+            `;
+            
+            channelCardsContainer.appendChild(card);
+            continue;
+        }
+        
+        const card = document.createElement('div');
+        card.className = 'channel-card';
+        
+        // Determine temperature display class based on status
+        let tempClass = '';
+        if (channel.status && channel.status.alarm_state) {
+            tempClass = 'alarm';
+        } else if ((channel.status && channel.status.open_circuit) || 
+                  (channel.status && channel.status.short_circuit)) {
+            tempClass = 'fault';
+        }
+        
+        // Format temperature value
+        let tempDisplay = 'N/A';
+        if (typeof channel.temperature === 'number') {
+            tempDisplay = channel.temperature.toFixed(1) + '°C';
+            
+            if (channel.status && channel.status.open_circuit) {
+                tempDisplay = 'Open Circuit';
+            } else if (channel.status && channel.status.short_circuit) {
+                tempDisplay = 'Short Circuit';
+            }
+        }
+        
+        // Lookup TC type text (tc_type 0-7 maps to K, J, T, etc.)
+        const tcTypeText = thermocoupleLookup[channel.tc_type] || 'Unknown';
+        
+        // Safely format numbers
+        const formatValue = (value, decimals = 1) => {
+            if (typeof value === 'number') {
+                return value.toFixed(decimals);
+            }
+            return 'N/A';
+        };
+        
+        // Card HTML structure
+        card.innerHTML = `
+            <div class="channel-card-header">
+                <span class="channel-title">Channel ${(channel.number !== undefined ? channel.number : i) + 1}</span>
+                <span class="channel-temp ${tempClass}">${tempDisplay}</span>
+            </div>
+            <div class="channel-details">
+                <div class="detail-item">
+                    <span class="info-label">Type:</span>
+                    <span class="info-value">Type ${tcTypeText}</span>
+                </div>
+                <div class="detail-item">
+                    <span class="info-label">Setpoint:</span>
+                    <span class="info-value">${formatValue(channel.alert_setpoint)}°C</span>
+                </div>
+                <div class="detail-item">
+                    <span class="info-label">Hysteresis:</span>
+                    <span class="info-value">${channel.alarm_hysteresis !== undefined ? channel.alarm_hysteresis : 'N/A'}°C</span>
+                </div>
+                <div class="detail-item">
+                    <span class="info-label">Cold Junction:</span>
+                    <span class="info-value">${formatValue(channel.cold_junction)}°C</span>
+                </div>
+            </div>
+            <div class="channel-status-indicators">
+                ${channel.settings && channel.settings.alert_enable ? 
+                  '<span class="channel-status-indicator enabled">Alert Enabled</span>' : 
+                  '<span class="channel-status-indicator disabled">Alert Disabled</span>'}
+                ${channel.settings && channel.settings.output_enable ? 
+                  '<span class="channel-status-indicator enabled">Output Enabled</span>' : 
+                  '<span class="channel-status-indicator disabled">Output Disabled</span>'}
+                ${channel.status && channel.status.alarm_state ? 
+                  '<span class="channel-status-indicator alarm">Alarm Active</span>' : ''}
+                ${channel.status && channel.status.output_state ? 
+                  '<span class="channel-status-indicator enabled">Output On</span>' : 
+                  '<span class="channel-status-indicator disabled">Output Off</span>'}
+                ${(channel.status && (channel.status.open_circuit || channel.status.short_circuit)) ? 
+                  '<span class="channel-status-indicator fault">Fault</span>' : ''}
+            </div>
+        `;
+        
+        channelCardsContainer.appendChild(card);
+    }
+    
+    // If no cards were added (all channels filtered out), show a message
+    if (channelCardsContainer.children.length === 0) {
+        channelCardsContainer.innerHTML = '<p class="no-boards-message">No configured thermocouple channels</p>';
+    }
+}
+
+// Function to update client-side temperature history
+function updateClientTemperatureHistory(channels) {
+    // Add current timestamp (seconds since start)
+    const currentTime = new Date().getTime() / 1000;
+    
+    // Initialize the channels array if it's empty
+    if (clientTemperatureHistory.channels.length === 0) {
+        // Create 8 channel objects with empty data arrays
+        for (let i = 0; i < 8; i++) {
+            clientTemperatureHistory.channels[i] = {
+                number: i,
+                tc_type: channels.find(ch => ch && ch.number === i)?.tc_type || 0,
+                data: []
+            };
+        }
+    }
+    
+    // Add current timestamp
+    clientTemperatureHistory.timestamps.push(currentTime);
+    
+    // Limit the number of timestamps
+    if (clientTemperatureHistory.timestamps.length > CLIENT_HISTORY_MAX_POINTS) {
+        clientTemperatureHistory.timestamps.shift();
+    }
+    
+    // Update each channel's data
+    for (let i = 0; i < 8; i++) {
+        // Find channel with this number
+        const channel = channels.find(ch => ch && ch.number === i);
+        
+        // Add the temperature data (or null if not available)
+        let tempValue = null;
+        if (channel && typeof channel.temperature === 'number') {
+            if (channel.status && (channel.status.open_circuit || channel.status.short_circuit)) {
+                tempValue = null; // Use null for open/short circuit
+            } else {
+                tempValue = channel.temperature;
+            }
+        }
+        
+        // Add the data point
+        clientTemperatureHistory.channels[i].data.push(tempValue);
+        
+        // Limit the number of data points
+        if (clientTemperatureHistory.channels[i].data.length > CLIENT_HISTORY_MAX_POINTS) {
+            clientTemperatureHistory.channels[i].data.shift();
+        }
+    }
+}
+
+// Update the temperature chart with historical data
+function updateTemperatureChart(data) {
+    const ctx = document.getElementById('temperatureChart');
+    if (!ctx) return;
+    
+    // If the chart already exists, update it instead of recreating
+    if (boardStatusChart) {
+        // Update the labels
+        boardStatusChart.data.labels = data.timestamps.map(timestamp => {
+            const currentTime = new Date().getTime() / 1000;
+            const secondsAgo = Math.round(currentTime - timestamp);
+            return secondsAgo >= 0 ? secondsAgo : 0;
+        }).map(seconds => {
+            if (seconds < 60) {
+                return seconds + 's';
+            } else {
+                const minutes = Math.floor(seconds / 60);
+                const remainingSeconds = seconds % 60;
+                return `${minutes}m${remainingSeconds > 0 ? remainingSeconds + 's' : ''}`;
+            }
+        });
+        
+        // Update or add datasets
+        data.channels.forEach((newDataset, i) => {
+            // If we already have this dataset, update it
+            if (i < boardStatusChart.data.datasets.length) {
+                boardStatusChart.data.datasets[i].data = newDataset.data;
+                // Preserve visibility state
+                // No need to update other properties (color, etc.)
+            } else {
+                // Add new dataset if it doesn't exist
+                boardStatusChart.data.datasets.push({
+                    label: `Channel ${newDataset.number + 1}`,
+                    data: newDataset.data,
+                    borderColor: chartColors[i % chartColors.length],
+                    backgroundColor: chartColors[i % chartColors.length] + '20', // Add transparency for fill
+                    fill: false,
+                    tension: 0.2,
+                    pointRadius: 1,
+                    borderWidth: 2
+                });
+            }
+        });
+        
+        // Remove extra datasets if there are fewer now
+        if (boardStatusChart.data.datasets.length > data.channels.length) {
+            boardStatusChart.data.datasets.length = data.channels.length;
+        }
+        
+        // Update the chart
+        boardStatusChart.update();
+        
+        // Update legend if needed
+        updateChartLegend(data.channels);
+    } else {
+        // Create legend items (only the first time)
+        const legendContainer = document.getElementById('chartLegend');
+        if (legendContainer) {
+            legendContainer.innerHTML = '';
+            
+            // Create legend items
+            data.channels.forEach((channel, index) => {
+                if (!channel || !channel.data || !Array.isArray(channel.data)) return;
+                if (channel.data.length === 0) return;
+                
+                const color = chartColors[index % chartColors.length];
+                
+                // Create legend item
+                const legendItem = document.createElement('div');
+                legendItem.className = 'legend-item';
+                legendItem.dataset.index = index; // Store the dataset index
+                
+                // Get channel number and type
+                const channelNumber = channel.number + 1; // Convert 0-based to 1-based for display
+                const tcTypeName = thermocoupleLookup[channel.tc_type] || 'Unknown';
+                
+                legendItem.innerHTML = `
+                    <div class="legend-color" style="background-color: ${color};"></div>
+                    <div class="legend-label">Channel ${channelNumber} (Type ${tcTypeName})</div>
+                `;
+                
+                // Add click event to toggle visibility
+                legendItem.addEventListener('click', function() {
+                    const index = parseInt(this.dataset.index);
+                    if (boardStatusChart && typeof boardStatusChart.isDatasetVisible === 'function') {
+                        const visibility = boardStatusChart.isDatasetVisible(index);
+                        boardStatusChart.setDatasetVisibility(index, !visibility);
+                        this.classList.toggle('disabled', visibility);
+                        boardStatusChart.update();
+                    }
+                });
+                
+                legendContainer.appendChild(legendItem);
+            });
+        }
+        
+        // Create the chart for the first time
+        boardStatusChart = new Chart(ctx, {
+            type: 'line',
+            data: {
+                labels: data.timestamps.map(timestamp => {
+                    const currentTime = new Date().getTime() / 1000;
+                    const secondsAgo = Math.round(currentTime - timestamp);
+                    return secondsAgo >= 0 ? secondsAgo : 0;
+                }).map(seconds => {
+                    if (seconds < 60) {
+                        return seconds + 's';
+                    } else {
+                        const minutes = Math.floor(seconds / 60);
+                        const remainingSeconds = seconds % 60;
+                        return `${minutes}m${remainingSeconds > 0 ? remainingSeconds + 's' : ''}`;
+                    }
+                }),
+                datasets: data.channels.map((channel, index) => ({
+                    label: `Channel ${channel.number + 1}`,
+                    data: channel.data,
+                    borderColor: chartColors[index % chartColors.length],
+                    backgroundColor: chartColors[index % chartColors.length] + '20', // Add transparency for fill
+                    fill: false,
+                    tension: 0.2,
+                    pointRadius: 1,
+                    borderWidth: 2
+                }))
+            },
+            options: {
+                responsive: true,
+                maintainAspectRatio: false,
+                animation: {
+                    duration: 500 // Shorter animation for smoother updates
+                },
+                plugins: {
+                    legend: {
+                        display: false // We use our custom legend
+                    },
+                    tooltip: {
+                        mode: 'index',
+                        intersect: false,
+                        callbacks: {
+                            label: function(context) {
+                                const label = context.dataset.label || '';
+                                const value = context.parsed.y;
+                                return `${label}: ${value !== null ? value.toFixed(1) : 'N/A'}°C`;
+                            },
+                            title: function(tooltipItems) {
+                                if (tooltipItems && tooltipItems.length > 0) {
+                                    return `${tooltipItems[0].label} ago`;
+                                }
+                                return '';
+                            }
+                        }
+                    }
+                },
+                scales: {
+                    x: {
+                        title: {
+                            display: true,
+                            text: 'Time ago'
+                        },
+                        reverse: true, // This makes newest data (lowest seconds ago) appear on the right
+                        ticks: {
+                            maxTicksLimit: 10
+                        }
+                    },
+                    y: {
+                        title: {
+                            display: true,
+                            text: 'Temperature (°C)'
+                        }
+                    }
+                }
+            }
+        });
+    }
+}
+
+// Function to update the chart legend without recreating it
+function updateChartLegend(channels) {
+    const legendContainer = document.getElementById('chartLegend');
+    if (!legendContainer) return;
+    
+    // Update existing legend items without recreating them
+    const legendItems = legendContainer.querySelectorAll('.legend-item');
+    
+    channels.forEach((channel, index) => {
+        if (!channel || !channel.data || !Array.isArray(channel.data)) return;
+        if (channel.data.length === 0) return;
+        
+        // Update existing legend item if it exists
+        if (index < legendItems.length) {
+            const tcTypeName = thermocoupleLookup[channel.tc_type] || 'Unknown';
+            const channelNumber = channel.number + 1;
+            
+            // Only update the text content, not the entire innerHTML to preserve event listeners
+            const labelElement = legendItems[index].querySelector('.legend-label');
+            if (labelElement) {
+                labelElement.textContent = `Channel ${channelNumber} (Type ${tcTypeName})`;
+            }
+        }
+    });
+}
+
+// Initialize board status when switching to that tab
+document.addEventListener('DOMContentLoaded', function() {
+    const boardStatusTab = document.querySelector('a[data-page="board-status"]');
+    if (boardStatusTab) {
+        boardStatusTab.addEventListener('click', function() {
+            // Initialize the board status page when switching to it
+            initBoardStatusPage();
+        });
+    }
+    
+    // Add Chart.js library dynamically
+    if (!window.Chart) {
+        const script = document.createElement('script');
+        script.src = 'https://cdn.jsdelivr.net/npm/chart.js';
+        script.onload = function() {
+            console.log('Chart.js loaded successfully');
+        };
+        document.head.appendChild(script);
+    }
+});

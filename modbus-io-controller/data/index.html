@@ -147,6 +147,100 @@
 
                 <div id="board-status" class="page">
                     <h1>Expansion Board Status</h1>
+                    <div class="board-status-container">
+                        <div class="board-status-header">
+                            <div class="board-status-description">
+                                <p class="page-description">View real-time status and data from configured expansion boards</p>
+                            </div>
+                            <div class="board-selector">
+                                <label for="statusBoardSelect">Select Board:</label>
+                                <select id="statusBoardSelect" class="form-control">
+                                    <!-- Boards will be populated here -->
+                                </select>
+                            </div>
+                        </div>
+                        
+                        <div id="noBoardsStatus" class="no-boards-message">
+                            <p>No expansion boards configured or connected. Please configure boards in the Expansion Board Configuration page.</p>
+                        </div>
+                        
+                        <div id="boardStatusContent" style="display: none;">
+                            <div class="board-overview">
+                                <div class="board-info-panel">
+                                    <h3>Board Information</h3>
+                                    <div class="board-info-grid">
+                                        <div class="info-item">
+                                            <span class="info-label">Name:</span>
+                                            <span id="boardInfoName" class="info-value"></span>
+                                        </div>
+                                        <div class="info-item">
+                                            <span class="info-label">Type:</span>
+                                            <span id="boardInfoType" class="info-value"></span>
+                                        </div>
+                                        <div class="info-item">
+                                            <span class="info-label">Status:</span>
+                                            <span id="boardInfoConnectionStatus" class="info-value"></span>
+                                        </div>
+                                        <div class="info-item">
+                                            <span class="info-label">Slave ID:</span>
+                                            <span id="boardInfoSlaveId" class="info-value"></span>
+                                        </div>
+                                        <div class="info-item">
+                                            <span class="info-label">Modbus Port:</span>
+                                            <span id="boardInfoModbusPort" class="info-value"></span>
+                                        </div>
+                                        <div class="info-item">
+                                            <span class="info-label">Poll Time:</span>
+                                            <span id="boardInfoPollTime" class="info-value"></span>
+                                        </div>
+                                    </div>
+                                </div>
+                                
+                                <!-- Thermocouple specific overview -->
+                                <div id="thermocoupleOverview" class="board-error-panel">
+                                    <h3>System Status</h3>
+                                    <div class="error-indicators">
+                                        <div class="error-indicator">
+                                            <span class="error-label">Modbus:</span>
+                                            <span id="modbusError" class="error-state"></span>
+                                        </div>
+                                        <div class="error-indicator">
+                                            <span class="error-label">I²C:</span>
+                                            <span id="i2cError" class="error-state"></span>
+                                        </div>
+                                        <div class="error-indicator">
+                                            <span class="error-label">PSU:</span>
+                                            <span id="psuError" class="error-state"></span>
+                                        </div>
+                                        <div class="error-indicator">
+                                            <span class="error-label">PSU Voltage:</span>
+                                            <span id="psuVoltage" class="info-value"></span>
+                                        </div>
+                                    </div>
+                                </div>
+                            </div>
+                            
+                            <!-- Thermocouple board specific content -->
+                            <div id="thermocoupleContent" class="board-type-content">
+                                <div class="temperature-chart-container">
+                                    <h3>Temperature Chart (30 minute max history)</h3>
+                                    <div class="chart-controls">
+                                        <div class="chart-legend" id="chartLegend">
+                                            <!-- Legend items will be added dynamically -->
+                                        </div>
+                                    </div>
+                                    <canvas id="temperatureChart"></canvas>
+                                </div>
+                                
+                                <div class="channels-container">
+                                    <h3>Channel Status</h3>
+                                    <div class="channel-cards" id="channelCards">
+                                        <!-- Channel cards will be added dynamically -->
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
                 </div>
 
                 <div id="settings" class="page">

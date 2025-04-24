@@ -1,6 +1,8 @@
 #include "io_core.h"
-#include "board_config.h"
 #include "io_objects.h"
+#include "board_config.h"
+#include "board_status.h"
+
 
 // Object definitions
 ModbusRTUMaster bus1(Serial1);
@@ -27,6 +29,9 @@ void init_io_core(void) {
 
     // Apply saved board configurations
     apply_board_configs();
+
+    // Setup board status API
+    setupBoardStatusAPI();
 
     log(LOG_INFO, false, "IO Core initialised\n");
 }
@@ -78,6 +83,7 @@ bool apply_thermocouple_config(BoardConfig* config) {
     thermocoupleIO_index.tcIO[config->boardIndex].lastUpdate = millis();
     thermocoupleIO_index.tcIO[config->boardIndex].pollTime = config->pollTime;
     thermocoupleIO_index.tcIO[config->boardIndex].reg.slaveID = config->slaveID;
+    strcpy(thermocoupleIO_index.tcIO[config->boardIndex].reg.boardName, config->boardName);
 
     // Configure channels
     for (uint8_t ch = 0; ch < 8; ch++) {
@@ -198,13 +204,23 @@ void manage_thermocouple(uint8_t index) {
 
     // Check board is online
     uint16_t buf[1];
-    if (!thermocoupleIO_index.tcIO[index].bus->readHoldingRegisters(thermocoupleIO_index.tcIO[index].slaveID, EXP_HOLDING_REG_BOARD_TYPE, buf, 1)) {
+    int retries = 0;
+    while (retries < 3) {
+        if (!thermocoupleIO_index.tcIO[index].bus->readHoldingRegisters(thermocoupleIO_index.tcIO[index].slaveID, EXP_HOLDING_REG_BOARD_TYPE, buf, 1)) {
+            retries++;
+            continue;
+        } else break;
+    }
+
+    if (retries == 3) {
         if (getBoard(index)->connected == true) {
             log(LOG_ERROR, true, "Board at index %d is offline\n", index);
             getBoard(index)->connected = false;
         }
         return;
     }
+    
+    // Ensure board is a thermocouple board (type 2)
     if (deviceType_t(buf[0]) != THERMOCOUPLE_IO) {
         log(LOG_ERROR, true, "Board at index %d is not a thermocouple board. Type: %d, %s\n", index, buf[0], getDeviceTypeName(deviceType_t(buf[0])));
         return;
@@ -213,7 +229,13 @@ void manage_thermocouple(uint8_t index) {
     log(LOG_DEBUG, false, "Board at index %d is online\n", index);
 
     // Get board status
-    if (!thermocoupleIO_index.tcIO[index].bus->readHoldingRegisters(thermocoupleIO_index.tcIO[index].slaveID, EXP_HOLDING_REG_STATUS, buf, 1)) {
+    retries = 0;
+    while (retries < 3) {
+        if (!thermocoupleIO_index.tcIO[index].bus->readHoldingRegisters(thermocoupleIO_index.tcIO[index].slaveID, EXP_HOLDING_REG_STATUS, buf, 1)) {
+            retries++;
+        } else break;
+    }
+    if (retries == 3) {
         log(LOG_ERROR, true, "Failed to read board status\n");
         return;
     }
@@ -243,7 +265,7 @@ void manage_thermocouple(uint8_t index) {
         }
     }
     if (changed) {
-        int retries = 0;
+        retries = 0;
         while (retries < 3) {
             if(thermocoupleIO_index.tcIO[index].bus->writeMultipleCoils(thermocoupleIO_index.tcIO[index].slaveID, 0x0000, coils, 32)) {
                 log(LOG_INFO, true, "Thermocouple board at index %d coils written successfully\n", index);
@@ -273,7 +295,7 @@ void manage_thermocouple(uint8_t index) {
         }
     }
     if (changed) {
-        int retries = 0;
+        retries = 0;
         while (retries < 3) {
             if(thermocoupleIO_index.tcIO[index].bus->writeMultipleHoldingRegisters(thermocoupleIO_index.tcIO[index].slaveID, EXP_HOLDING_REG_BOARD_NAME, holdingRegisters, 40)) {
                 log(LOG_INFO, true, "Holding registers written successfully\n");
@@ -291,18 +313,32 @@ void manage_thermocouple(uint8_t index) {
         }
     }
 
-    // Read registers
-    if(thermocoupleIO_index.tcIO[index].bus->readDiscreteInputs(thermocoupleIO_index.tcIO[index].slaveID, 0x0000, discreteInputs, 32)) {
-        log(LOG_DEBUG, false, "Thermocouple IO board index %d discrete inputs read successfully\n", index);
-    } else {
-        log(LOG_ERROR, true, "Thermocouple IO board index %d discrete inputs read failed\n", index);
+    // Read discrete inputs
+    retries = 0;
+    while (retries < 3) {
+        if(!thermocoupleIO_index.tcIO[index].bus->readDiscreteInputs(thermocoupleIO_index.tcIO[index].slaveID, 0x0000, discreteInputs, 32)) {
+            retries++;
+        } else break;
     }
-    if(thermocoupleIO_index.tcIO[index].bus->readInputRegisters(thermocoupleIO_index.tcIO[index].slaveID, 0x0000, inputRegisters, 48)) {
-        log(LOG_DEBUG, false, "Thermocouple IO board index %d input registers read successfully\n", index);
-    } else {
-        log(LOG_ERROR, true, "Thermocouple IO board index %d input registers read failed\n", index);
+    if (retries == 3) {
+        log(LOG_ERROR, true, "Thermocouple board at index %d discrete inputs read failed after 3 retries\n", index);
+        getBoard(index)->connected = false;
+        return;
     }
     memcpy(&thermocoupleIO_index.tcIO[index].reg.outputState, discreteInputs, sizeof(discreteInputs));
+
+    // Read input registers
+    retries = 0;
+    while (retries < 3) {
+        if(!thermocoupleIO_index.tcIO[index].bus->readInputRegisters(thermocoupleIO_index.tcIO[index].slaveID, 0x0000, inputRegisters, 48)) {
+            retries++;
+        } else break;
+    }
+    if (retries == 3) {
+        log(LOG_ERROR, true, "Thermocouple IO board index %d input registers read failed after 3 retries\n", index);
+        getBoard(index)->connected = false;
+        return;
+    }
     memcpy(&thermocoupleIO_index.tcIO[index].reg.temperature, inputRegisters, sizeof(inputRegisters));
 }
 
