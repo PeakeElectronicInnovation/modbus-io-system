@@ -75,9 +75,18 @@ void manageTerminal(void)
         log(LOG_INFO, false, "Getting board configuration for index %d...\n", x);
         print_board_config(x);
       }
+
+      // Reset thermocouple latches ---------------------------->
+      else if (strncmp(serialString, "almrst -", 8) == 0) {
+        // Extract the number after "config -"
+        int x = atoi(serialString + 8); // Skip over "config -" and convert the rest to int
+      
+        log(LOG_INFO, false, "Resetting thermocouple latches for board index %d...\n", x);
+        thermocouple_latch_reset_all(x);
+      }
       else {
         log(LOG_INFO, false, "Unknown command: %s\n", serialString);
-        log(LOG_INFO, false, "Available commands: \n\t- ip \t\t(print IP address)\n\t- sd \t\t(print SD card info)\n\t- status\n\t- assign \t(assign modbus address)\n\t- config -x\t(print board x configuration)\n\t- reboot\n");
+        log(LOG_INFO, false, "Available commands: \n\t- ip \t\t(print IP address)\n\t- sd \t\t(print SD card info)\n\t- status\n\t- assign \t(assign modbus address)\n\t- config -x\t(print board x configuration)\n\t- almrst -x\t(reset thermocouple latches for board x)\n\t- reboot\n");
       }
     }
     // Clear the serial buffer each loop.

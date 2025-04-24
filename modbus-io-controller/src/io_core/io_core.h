@@ -32,6 +32,8 @@ uint8_t findFreeDeviceIndex(void);
 void manage_analogue_digital_io(uint8_t index);
 void manage_thermocouple(uint8_t index);
 bool setup_thermocouple(uint8_t index);
+bool thermocouple_latch_reset(uint8_t index, uint8_t channel);
+bool thermocouple_latch_reset_all(uint8_t index);
 void manage_rtd(uint8_t index);
 void manage_energy_meter(uint8_t index);
 void print_board_config(uint8_t index);

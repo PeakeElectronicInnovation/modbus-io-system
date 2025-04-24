@@ -95,6 +95,7 @@ struct modbus_coil_t {      // FC01/05/15
     bool outputEnable[8];   // 8-15
     bool alertLatch[8];     // 16-23
     bool alertEdge[8];      // 24-31
+    bool resetLatch[8];    // 32-39 Remember to modify LATCH_RESET_PTR if this changes!
 } modbusOutSet;
 
 struct modbus_discrete_t {  // FC02
@@ -121,7 +122,8 @@ struct modbus_input_t {     // FC04
 } modbusInput;
 
 // Modbus register arrays
-bool coil[32];
+bool coil[40];
+#define LATCH_RESET_PTR 32
 bool inputDiscrete[32];
 uint16_t inputReg[48];
 uint16_t holdingReg[42];

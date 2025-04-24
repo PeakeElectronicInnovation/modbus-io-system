@@ -366,6 +366,20 @@ bool setup_thermocouple(uint8_t index) {
     return true;
 }
 
+bool thermocouple_latch_reset(uint8_t index, uint8_t channel) {
+    if (index >= boardCount) return false;
+    if (channel > 8) return false;
+
+    return thermocoupleIO_index.tcIO[index].bus->writeSingleCoil(thermocoupleIO_index.tcIO[index].slaveID, channel + TCIO_COIL_LATCH_RESET_PTR, true);
+}    
+
+bool thermocouple_latch_reset_all(uint8_t index) {
+    if (index >= boardCount) return false;
+
+    bool buf[8] = {true, true, true, true, true, true, true, true};
+    return thermocoupleIO_index.tcIO[index].bus->writeMultipleCoils(thermocoupleIO_index.tcIO[index].slaveID, TCIO_COIL_LATCH_RESET_PTR, buf, 8);
+}
+
 void manage_rtd(uint8_t index) {
 }
 

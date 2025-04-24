@@ -66,6 +66,8 @@ struct thermocoupleModbus_t { // Thermocouple interface board modbus registers (
 #define TCIO_HOLDING_REG_ALERT_SP       18
 #define TCIO_HOLDING_REG_ALARM_HYST     34
 
+#define TCIO_COIL_LATCH_RESET_PTR 32
+
 struct thermocoupleIO_t {
     ModbusRTUMaster *bus;
     uint8_t slaveID;

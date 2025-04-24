@@ -85,7 +85,7 @@ void getConfig() {
 
 void setupModbus() {
   pinMode(PIN_ADDR_BTN, INPUT_PULLUP);
-  bus.configureCoils(coil, 32);
+  bus.configureCoils(coil, 40);
   bus.configureDiscreteInputs(inputDiscrete, 32);
   bus.configureHoldingRegisters(holdingReg, 42);
   bus.configureInputRegisters(inputReg, 48);
@@ -252,6 +252,12 @@ void handleModbus() {
         tcConfig[i].alertEdge = coilData.alertEdge[i];
         Serial.printf("alert Edge %d is: %i\n", i, modbusOutSet.alertEdge[i]);
         tc[i].setAlartEdge(0, modbusOutSet.alertEdge[i]);           // 1 = alert on falling temp, 0 = alert on rising temp
+      }
+      if (coilData.resetLatch[i]) {
+        coil[LATCH_RESET_PTR + i] = false; // Reset latch
+        // Clear device alert 0 interrupt bit
+        tc[i].clearAlert(0);
+        Serial.printf("MCP9601 %d alert latch 0 reset\n", i);
       }
     }
   }
