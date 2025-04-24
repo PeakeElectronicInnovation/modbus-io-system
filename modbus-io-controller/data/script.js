@@ -718,7 +718,7 @@ function initFileManager() {
     checkAndLoadDirectory();
 }
 
-// Function to navigate to a directory
+// Navigate to a directory
 function navigateTo(path) {
     if (fileManagerActive) {
         loadDirectory(path);
@@ -2018,6 +2018,10 @@ function updateThermocoupleChannels(channels) {
         return;
     }
     
+    // Track if any channel has latched alarms that are active
+    let hasActiveAlarms = false;
+    let hasLatchedChannels = false;
+    
     // Make sure we display all channels (0-7, displayed as 1-8)
     for (let i = 0; i < 8; i++) {
         // Find channel with this number
@@ -2025,8 +2029,6 @@ function updateThermocoupleChannels(channels) {
         
         // If channel doesn't exist, create a placeholder with basic data
         if (!channel) {
-            console.log(`Channel ${i} (display as ${i+1}) not found in data, creating placeholder`);
-            
             const card = document.createElement('div');
             card.className = 'channel-card';
             
@@ -2053,9 +2055,6 @@ function updateThermocoupleChannels(channels) {
                         <span class="info-value">N/A</span>
                     </div>
                 </div>
-                <div class="channel-status-indicators">
-                    <span class="channel-status-indicator disabled">No Data</span>
-                </div>
             `;
             
             channelCardsContainer.appendChild(card);
@@ -2077,12 +2076,10 @@ function updateThermocoupleChannels(channels) {
         // Format temperature value
         let tempDisplay = 'N/A';
         if (typeof channel.temperature === 'number') {
-            tempDisplay = channel.temperature.toFixed(1) + '°C';
-            
-            if (channel.status && channel.status.open_circuit) {
+            if (channel.status && (channel.status.open_circuit || channel.status.short_circuit)) {
                 tempDisplay = 'Open Circuit';
-            } else if (channel.status && channel.status.short_circuit) {
-                tempDisplay = 'Short Circuit';
+            } else {
+                tempDisplay = channel.temperature.toFixed(1) + '°C';
             }
         }
         
@@ -2097,8 +2094,25 @@ function updateThermocoupleChannels(channels) {
             return 'N/A';
         };
         
-        // Card HTML structure
-        card.innerHTML = `
+        // Check if channel has latch enabled and if alarm is active
+        const isLatchEnabled = channel.settings && channel.settings.alert_latch;
+        const isAlarmActive = channel.status && channel.status.alarm_state;
+        
+        // Check if temperature is below setpoint (only enable reset if temp is safe)
+        const tempValue = typeof channel.temperature === 'number' ? channel.temperature : null;
+        const setpointValue = typeof channel.alert_setpoint === 'number' ? channel.alert_setpoint : null;
+        const isBelowSetpoint = tempValue !== null && setpointValue !== null && tempValue < setpointValue;
+        
+        // Update global flags
+        if (isLatchEnabled) {
+            hasLatchedChannels = true;
+            if (isBelowSetpoint) {
+                hasActiveAlarms = true;
+            }
+        }
+        
+        // Card HTML structure with possible reset button
+        let cardContent = `
             <div class="channel-card-header">
                 <span class="channel-title">Channel ${(channel.number !== undefined ? channel.number : i) + 1}</span>
                 <span class="channel-temp ${tempClass}">${tempDisplay}</span>
@@ -2135,9 +2149,22 @@ function updateThermocoupleChannels(channels) {
                   '<span class="channel-status-indicator disabled">Output Off</span>'}
                 ${(channel.status && (channel.status.open_circuit || channel.status.short_circuit)) ? 
                   '<span class="channel-status-indicator fault">Fault</span>' : ''}
+                ${channel.settings && channel.settings.alert_latch ? 
+                  '<span class="channel-status-indicator enabled">Latch Enabled</span>' : ''}
             </div>
         `;
         
+        // Add reset button for any channel with latching enabled
+        if (isLatchEnabled) {
+            cardContent += `
+            <div class="channel-alarm-actions">
+                <button class="btn btn-alarm reset-alarm-btn" data-channel="${channel.number}" ${!isBelowSetpoint ? 'disabled' : ''}>
+                    Reset Alarm${!isBelowSetpoint ? ' (Temp > Setpoint)' : ''}
+                </button>
+            </div>`;
+        }
+        
+        card.innerHTML = cardContent;
         channelCardsContainer.appendChild(card);
     }
     
@@ -2145,13 +2172,128 @@ function updateThermocoupleChannels(channels) {
     if (channelCardsContainer.children.length === 0) {
         channelCardsContainer.innerHTML = '<p class="no-boards-message">No configured thermocouple channels</p>';
     }
+    
+    // Enable or disable the reset all alarms button
+    const resetAllBtn = document.getElementById('resetAllAlarmsBtn');
+    if (resetAllBtn) {
+        resetAllBtn.disabled = !(hasLatchedChannels && hasActiveAlarms);
+    }
+    
+    // Add event listeners for all reset alarm buttons
+    document.querySelectorAll('.reset-alarm-btn').forEach(btn => {
+        btn.addEventListener('click', function() {
+            const channel = this.getAttribute('data-channel');
+            resetChannelAlarm(channel);
+        });
+    });
 }
 
-// Function to update client-side temperature history
+// Function to reset a specific channel alarm
+async function resetChannelAlarm(channel) {
+    try {
+        if (!selectedBoardId) {
+            showToast('error', 'Error', 'No board selected');
+            return;
+        }
+        
+        // Ensure channel is just a number (remove any extra characters)
+        const channelNum = parseInt(channel);
+        
+        const response = await fetch(`/api/status/reset_alarm?id=${selectedBoardId}&channel=${channelNum}`);
+        
+        if (!response.ok) {
+            throw new Error(`HTTP error! status: ${response.status}`);
+        }
+        
+        const data = await response.json();
+        
+        if (data.success) {
+            showToast('success', 'Success', `Reset alarm for channel ${channelNum + 1}`);
+            // Refresh the board status to update UI
+            loadBoardStatus(selectedBoardId);
+        } else {
+            throw new Error(data.error || 'Failed to reset alarm');
+        }
+    } catch (error) {
+        console.error('Error resetting channel alarm:', error);
+        showToast('error', 'Error', `Failed to reset alarm: ${error.message}`);
+    }
+}
+
+// Function to reset all alarms
+async function resetAllAlarms() {
+    try {
+        if (!selectedBoardId) {
+            showToast('error', 'Error', 'No board selected');
+            return;
+        }
+        
+        const response = await fetch(`/api/status/reset_all_alarms?id=${selectedBoardId}`);
+        
+        if (!response.ok) {
+            throw new Error(`HTTP error! status: ${response.status}`);
+        }
+        
+        const data = await response.json();
+        
+        if (data.success) {
+            showToast('success', 'Success', 'Reset all alarms');
+            // Refresh the board status to update UI
+            loadBoardStatus(selectedBoardId);
+        } else {
+            throw new Error(data.error || 'Failed to reset alarms');
+        }
+    } catch (error) {
+        console.error('Error resetting all alarms:', error);
+        showToast('error', 'Error', `Failed to reset alarms: ${error.message}`);
+    }
+}
+
+// Initialize the board status page
+function initBoardStatusPage() {
+    console.log('Initializing board status page');
+    
+    // Clear any existing interval
+    if (statusRefreshInterval) {
+        clearInterval(statusRefreshInterval);
+    }
+    
+    // Load the board list
+    loadBoardStatusList();
+    
+    // Set up the board selector change event
+    const boardSelector = document.getElementById('statusBoardSelect');
+    if (boardSelector) {
+        boardSelector.addEventListener('change', function() {
+            selectedBoardId = this.value;
+            if (selectedBoardId) {
+                loadBoardStatus(selectedBoardId);
+                
+                // Reset the temperature history and chart when switching boards
+                resetTemperatureHistory();
+                if (boardStatusChart) {
+                    boardStatusChart.destroy();
+                    boardStatusChart = null;
+                }
+            }
+        });
+    }
+    
+    // Set up the reset all alarms button
+    const resetAllBtn = document.getElementById('resetAllAlarmsBtn');
+    if (resetAllBtn) {
+        resetAllBtn.addEventListener('click', resetAllAlarms);
+    }
+    
+    // Start the refresh interval (every 5 seconds)
+    statusRefreshInterval = setInterval(refreshBoardStatus, 5000);
+}
+
+// Update client-side temperature history
 function updateClientTemperatureHistory(channels) {
     // Add current timestamp (seconds since start)
     const currentTime = new Date().getTime() / 1000;
-    
+        
     // Initialize the channels array if it's empty
     if (clientTemperatureHistory.channels.length === 0) {
         // Create 8 channel objects with empty data arrays
@@ -2184,7 +2326,7 @@ function updateClientTemperatureHistory(channels) {
                 tempValue = null; // Use null for open/short circuit
             } else {
                 tempValue = channel.temperature;
-            }
+        }
         }
         
         // Add the data point
@@ -2212,11 +2354,11 @@ function updateTemperatureChart(data) {
         }).map(seconds => {
             if (seconds < 60) {
                 return seconds + 's';
-            } else {
+        } else {
                 const minutes = Math.floor(seconds / 60);
                 const remainingSeconds = seconds % 60;
                 return `${minutes}m${remainingSeconds > 0 ? remainingSeconds + 's' : ''}`;
-            }
+        }
         });
         
         // Update or add datasets
@@ -2238,7 +2380,7 @@ function updateTemperatureChart(data) {
                     pointRadius: 1,
                     borderWidth: 2
                 });
-            }
+    }
         });
         
         // Remove extra datasets if there are fewer now
@@ -2304,14 +2446,14 @@ function updateTemperatureChart(data) {
                 }).map(seconds => {
                     if (seconds < 60) {
                         return seconds + 's';
-                    } else {
+        } else {
                         const minutes = Math.floor(seconds / 60);
                         const remainingSeconds = seconds % 60;
                         return `${minutes}m${remainingSeconds > 0 ? remainingSeconds + 's' : ''}`;
-                    }
+        }
                 }),
                 datasets: data.channels.map((channel, index) => ({
-                    label: `Channel ${channel.number + 1}`,
+                    label: `Ch. ${channel.number + 1}`,
                     data: channel.data,
                     borderColor: chartColors[index % chartColors.length],
                     backgroundColor: chartColors[index % chartColors.length] + '20', // Add transparency for fill
@@ -2394,10 +2536,10 @@ function updateChartLegend(channels) {
             if (labelElement) {
                 labelElement.textContent = `Channel ${channelNumber} (Type ${tcTypeName})`;
             }
-        }
-    });
-}
-
+            }
+        });
+    }
+    
 // Initialize board status when switching to that tab
 document.addEventListener('DOMContentLoaded', function() {
     const boardStatusTab = document.querySelector('a[data-page="board-status"]');
@@ -2408,13 +2550,23 @@ document.addEventListener('DOMContentLoaded', function() {
         });
     }
     
-    // Add Chart.js library dynamically
+    // Add Chart.js library dynamically with CDN primary and local fallback
     if (!window.Chart) {
         const script = document.createElement('script');
+        
+        // Try to load from CDN first (faster when internet available)
         script.src = 'https://cdn.jsdelivr.net/npm/chart.js';
+        
+        // If CDN fails, fall back to local version
+        script.onerror = function() {
+            console.log('Failed to load Chart.js from CDN, falling back to local version');
+            script.src = '/chart.js';
+        };
+        
         script.onload = function() {
             console.log('Chart.js loaded successfully');
         };
+        
         document.head.appendChild(script);
     }
 });

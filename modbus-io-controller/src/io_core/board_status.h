@@ -11,3 +11,5 @@ void setupBoardStatusAPI(void);
 void handleGetBoardStatus(void);
 void handleGetAllBoardsStatus(void);
 void handleGetThermocoupleData(void);
+void handleResetAlarm(void);
+void handleResetAllAlarms(void);

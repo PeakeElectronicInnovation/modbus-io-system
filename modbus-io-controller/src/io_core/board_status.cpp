@@ -18,6 +18,22 @@ void setupBoardStatusAPI() {
         server.send(200, "text/plain", "");
     });
     
+    // Add CORS pre-flight options for reset_alarm endpoint
+    server.on("/api/status/reset_alarm", HTTP_OPTIONS, []() {
+        server.sendHeader("Access-Control-Allow-Origin", "*");
+        server.sendHeader("Access-Control-Allow-Methods", "GET, OPTIONS");
+        server.sendHeader("Access-Control-Allow-Headers", "Content-Type");
+        server.send(200, "text/plain", "");
+    });
+    
+    // Add CORS pre-flight options for reset_all_alarms endpoint
+    server.on("/api/status/reset_all_alarms", HTTP_OPTIONS, []() {
+        server.sendHeader("Access-Control-Allow-Origin", "*");
+        server.sendHeader("Access-Control-Allow-Methods", "GET, OPTIONS");
+        server.sendHeader("Access-Control-Allow-Headers", "Content-Type");
+        server.send(200, "text/plain", "");
+    });
+    
     // Get status of all boards
     server.on("/api/status", HTTP_GET, handleGetAllBoardsStatus);
     
@@ -27,7 +43,11 @@ void setupBoardStatusAPI() {
     // Get thermocouple data for a specific board
     server.on("/api/status/tc", HTTP_GET, handleGetThermocoupleData);
     
-    // History endpoint removed to save RAM
+    // Reset a specific channel's latched alarm
+    server.on("/api/status/reset_alarm", HTTP_GET, handleResetAlarm);
+    
+    // Reset all latched alarms for a board
+    server.on("/api/status/reset_all_alarms", HTTP_GET, handleResetAllAlarms);
     
     log(LOG_INFO, false, "Board status API setup complete\n");
 }
@@ -292,4 +312,117 @@ void handleGetThermocoupleData() {
     String response;
     serializeJson(doc, response);
     server.send(200, "application/json", response);
+}
+
+// Handler for resetting a specific channel's latched alarm
+void handleResetAlarm() {
+    log(LOG_INFO, false, "handleResetAlarm\n");
+    // Add CORS headers
+    server.sendHeader("Access-Control-Allow-Origin", "*");
+    server.sendHeader("Access-Control-Allow-Methods", "GET");
+    server.sendHeader("Access-Control-Allow-Headers", "Content-Type");
+    
+    // Check if ID and channel parameters are provided
+    if (!server.hasArg("id") || !server.hasArg("channel")) {
+        server.send(400, "application/json", "{\"error\":\"Missing id or channel parameter\"}");
+        return;
+    }
+    
+    // Get board ID and channel number
+    uint8_t boardId = server.arg("id").toInt();
+    uint8_t channel = server.arg("channel").toInt();
+    
+    // Check if board exists
+    if (boardId >= boardCount) {
+        server.send(404, "application/json", "{\"error\":\"Board not found\"}");
+        return;
+    }
+    
+    // Get the board configuration
+    BoardConfig* config = &boardConfigs[boardId];
+    
+    // Check if board is a thermocouple board
+    if (config->type != THERMOCOUPLE_IO) {
+        server.send(400, "application/json", "{\"error\":\"Board is not a thermocouple board\"}");
+        return;
+    }
+    
+    // Check if board is connected
+    if (!config->connected) {
+        server.send(400, "application/json", "{\"error\":\"Board is not connected\"}");
+        return;
+    }
+    
+    // Get the thermocouple board index
+    uint8_t tcIndex = config->boardIndex;
+    
+    // Check if channel is valid
+    if (channel < 0 || channel >= 8) {
+        server.send(400, "application/json", "{\"error\":\"Invalid channel number\"}");
+        return;
+    }
+    
+    // Reset the alarm latch for the specified channel using the provided function
+    bool result = thermocouple_latch_reset(tcIndex, channel);
+    
+    if (result) {
+        // Return success response
+        server.send(200, "application/json", "{\"success\":true}");
+    } else {
+        // Return error response
+        server.send(500, "application/json", "{\"error\":\"Failed to reset alarm\"}");
+    }
+}
+
+// Handler for resetting all latched alarms for a board
+void handleResetAllAlarms() {
+    log(LOG_INFO, false, "handleResetAllAlarms\n");
+    // Add CORS headers
+    server.sendHeader("Access-Control-Allow-Origin", "*");
+    server.sendHeader("Access-Control-Allow-Methods", "GET");
+    server.sendHeader("Access-Control-Allow-Headers", "Content-Type");
+    
+    // Check if ID parameter is provided
+    if (!server.hasArg("id")) {
+        server.send(400, "application/json", "{\"error\":\"Missing id parameter\"}");
+        return;
+    }
+    
+    // Get board ID
+    uint8_t boardId = server.arg("id").toInt();
+    
+    // Check if board exists
+    if (boardId >= boardCount) {
+        server.send(404, "application/json", "{\"error\":\"Board not found\"}");
+        return;
+    }
+    
+    // Get the board configuration
+    BoardConfig* config = &boardConfigs[boardId];
+    
+    // Check if board is a thermocouple board
+    if (config->type != THERMOCOUPLE_IO) {
+        server.send(400, "application/json", "{\"error\":\"Board is not a thermocouple board\"}");
+        return;
+    }
+    
+    // Check if board is connected
+    if (!config->connected) {
+        server.send(400, "application/json", "{\"error\":\"Board is not connected\"}");
+        return;
+    }
+    
+    // Get the thermocouple board index
+    uint8_t tcIndex = config->boardIndex;
+    
+    // Reset all alarm latches using the provided function
+    bool result = thermocouple_latch_reset_all(tcIndex);
+    
+    if (result) {
+        // Return success response
+        server.send(200, "application/json", "{\"success\":true}");
+    } else {
+        // Return error response
+        server.send(500, "application/json", "{\"error\":\"Failed to reset alarms\"}");
+    }
 }
