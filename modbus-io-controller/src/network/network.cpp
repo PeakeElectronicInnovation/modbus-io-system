@@ -60,6 +60,7 @@ void setupEthernet()
   SPI.setCS(PIN_ETH_CS);
 
   eth.setSPISpeed(30000000);
+  lwipPollingPeriod(3);
 
   eth.hostname(networkConfig.hostname);
 

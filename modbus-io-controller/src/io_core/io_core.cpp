@@ -2,6 +2,7 @@
 #include "io_objects.h"
 #include "board_config.h"
 #include "board_status.h"
+#include "dashboard_config.h"
 
 
 // Object definitions
@@ -32,6 +33,9 @@ void init_io_core(void) {
 
     // Setup board status API
     setupBoardStatusAPI();
+
+    // Setup dashboard configuration API
+    init_dashboard_config();
 
     log(LOG_INFO, false, "IO Core initialised\n");
 }

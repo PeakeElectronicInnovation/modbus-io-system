@@ -1242,6 +1242,16 @@ async function saveBoardConfiguration() {
         // Hide form and refresh list
         hideBoardConfigForm();
         loadBoardConfigurations();
+        
+        // Reload dashboard items if board configuration has changed
+        // as "show_on_dashboard" settings may have been updated
+        if (document.querySelector('#dashboard').classList.contains('active')) {
+            // If dashboard is the active tab, reload immediately
+            loadDashboardItems();
+        } else {
+            // Flag that dashboard needs reloading when user switches to it
+            window.dashboardNeedsReload = true;
+        }
     } catch (error) {
         console.error('Error saving board configuration:', error);
         showToast('error', 'Error', 'Failed to save board configuration');
@@ -1792,8 +1802,8 @@ async function initialiseBoard(index) {
                         try {
                             const result = JSON.parse(xhr.responseText);
                             resolve({ ok: true, status: xhr.status, result });
-                        } catch (error) {
-                            console.error('Error parsing JSON response:', error);
+                        } catch (parseError) {
+                            console.error('Error parsing JSON response:', parseError);
                             reject(new Error('Invalid JSON response'));
                         }
                     } else {
@@ -2614,5 +2624,395 @@ document.addEventListener('DOMContentLoaded', function() {
         };
         
         document.head.appendChild(script);
+    }
+});
+
+// Dashboard functionality
+let dashboardItems = [];
+let dashboardEditMode = false;
+let dashboardRefreshInterval = null;
+
+// Initialize dashboard
+function initDashboard() {
+    console.log('Initializing dashboard');
+    
+    // Set up event listeners for dashboard controls
+    const editBtn = document.getElementById('editDashboardBtn');
+    const saveBtn = document.getElementById('saveDashboardBtn');
+    const cancelBtn = document.getElementById('cancelDashboardBtn');
+    
+    if (editBtn) {
+        editBtn.addEventListener('click', enableDashboardEditMode);
+    }
+    
+    if (saveBtn) {
+        saveBtn.addEventListener('click', saveDashboardOrder);
+    }
+    
+    if (cancelBtn) {
+        cancelBtn.addEventListener('click', disableDashboardEditMode);
+    }
+    
+    // Load dashboard items
+    loadDashboardItems();
+}
+
+// Load dashboard items from the server
+async function loadDashboardItems() {
+    try {
+        const response = await fetch('/api/dashboard/items');
+        const data = await response.json();
+        
+        dashboardItems = data.items || [];
+        
+        // Sort items by display order
+        dashboardItems.sort((a, b) => a.display_order - b.display_order);
+        
+        // Render dashboard items
+        renderDashboardItems();
+        
+        // Start refresh interval if not already running
+        if (!dashboardRefreshInterval) {
+            dashboardRefreshInterval = setInterval(refreshDashboardData, 5000);
+        }
+        
+    } catch (error) {
+        console.error('Error loading dashboard items:', error);
+        showToast('error', 'Error', 'Failed to load dashboard items');
+    }
+}
+
+// Render dashboard items
+function renderDashboardItems() {
+    const container = document.getElementById('dashboardItemsContainer');
+    const noItemsMessage = document.getElementById('noDashboardItems');
+    
+    if (!container) return;
+    
+    // Clear container
+    container.innerHTML = '';
+    
+    // Show/hide no items message
+    if (dashboardItems.length === 0) {
+        if (noItemsMessage) {
+            noItemsMessage.style.display = 'block';
+        }
+        container.style.display = 'none';
+        return;
+    } else {
+        if (noItemsMessage) {
+            noItemsMessage.style.display = 'none';
+        }
+        container.style.display = 'grid';
+    }
+    
+    // Create items
+    dashboardItems.forEach(item => {
+        const dashboardItem = document.createElement('div');
+        dashboardItem.className = 'dashboard-item';
+        dashboardItem.id = `dashboard-item-${item.board_index}-${item.channel_index}`;
+        dashboardItem.dataset.boardIndex = item.board_index;
+        dashboardItem.dataset.channelIndex = item.channel_index;
+        dashboardItem.dataset.displayOrder = item.display_order;
+        
+        const boardName = document.createElement('div');
+        boardName.className = 'board-name';
+        boardName.textContent = item.board_name;
+        
+        const channelName = document.createElement('div');
+        channelName.className = 'channel-name';
+        channelName.textContent = `Channel ${item.channel_index + 1}`;
+        
+        const temperature = document.createElement('div');
+        temperature.className = 'temperature';
+        temperature.innerHTML = '&ndash;.&ndash; °C';
+        
+        const coldJunction = document.createElement('div');
+        coldJunction.className = 'cold-junction';
+        coldJunction.innerHTML = 'CJ: &ndash;.&ndash; °C';
+        
+        const outputStatus = document.createElement('div');
+        outputStatus.className = 'output-status';
+        outputStatus.innerHTML = '<span class="output-indicator"></span> Output: &ndash;';
+        
+        const alertStatus = document.createElement('div');
+        alertStatus.className = 'alert-status';
+        
+        // Add elements to item
+        dashboardItem.appendChild(boardName);
+        dashboardItem.appendChild(channelName);
+        dashboardItem.appendChild(temperature);
+        dashboardItem.appendChild(coldJunction);
+        dashboardItem.appendChild(outputStatus);
+        dashboardItem.appendChild(alertStatus);
+        
+        // Add item to container
+        container.appendChild(dashboardItem);
+    });
+    
+    // Initialize sortable if in edit mode
+    if (dashboardEditMode) {
+        initSortable();
+    }
+}
+
+// Refresh dashboard data (temperatures, statuses, etc.)
+async function refreshDashboardData() {
+    if (dashboardItems.length === 0) return;
+    
+    try {
+        // Get unique board IDs
+        const boardIds = [...new Set(dashboardItems.map(item => item.board_index))];
+        
+        // Get status for each board
+        for (const boardId of boardIds) {
+            const response = await fetch(`/api/status/board?id=${boardId}`);
+            
+            if (!response.ok) {
+                throw new Error(`HTTP error! status: ${response.status}`);
+            }
+            
+            const board = await response.json();
+            
+            // Check if this is a thermocouple board
+            if (board.type === 'Thermocouple IO') {
+                // Check if thermocouple data exists
+                if (!board.thermocouple || !board.thermocouple.channels) {
+                    console.error('Thermocouple data missing from API response');
+                    continue;
+                }
+                
+                // Update dashboard with channel data
+                updateDashboardThermocoupleItems(boardId, board.thermocouple.channels);
+            }
+            // Add more board types as needed
+        }
+    } catch (error) {
+        console.error('Error refreshing dashboard data:', error);
+    }
+}
+
+// Update thermocouple items on the dashboard
+function updateDashboardThermocoupleItems(boardId, channels) {
+    const items = dashboardItems.filter(item => item.board_index == boardId);
+    
+    // Update each item
+    items.forEach(item => {
+        const channelIndex = item.channel_index;
+        if (channelIndex >= channels.length) return;
+        
+        const channel = channels[channelIndex];
+        if (!channel) return;
+        
+        const dashboardItem = document.getElementById(`dashboard-item-${boardId}-${channelIndex}`);
+        if (!dashboardItem) return;
+        
+        // Update temperature
+        const temperatureElement = dashboardItem.querySelector('.temperature');
+        if (temperatureElement) {
+            if (channel.status && (channel.status.open_circuit || channel.status.short_circuit)) {
+                temperatureElement.innerHTML = 'Fault';
+                temperatureElement.style.color = 'orange'; // Amber color for faults
+            } else {
+                temperatureElement.innerHTML = channel.temperature !== undefined ? `${channel.temperature.toFixed(1)} °C` : '&ndash;.&ndash; °C';
+                
+                // Set color based on alarm state
+                if (channel.status && channel.status.alarm_state) {
+                    temperatureElement.style.color = 'orangeRed'; // Red for active alerts
+                } else {
+                    temperatureElement.style.color = '#2196F3'; // Default blue for normal temperatures
+                }
+            }
+        }
+        
+        // Update cold junction
+        const coldJunctionElement = dashboardItem.querySelector('.cold-junction');
+        if (coldJunctionElement) {
+            coldJunctionElement.innerHTML = channel.cold_junction !== undefined ? `CJ: ${channel.cold_junction.toFixed(1)} °C` : 'CJ: &ndash;.&ndash; °C';
+        }
+        
+        // Update output status based on status.output_state (from Board Status API)
+        const outputStatusElement = dashboardItem.querySelector('.output-status');
+        if (outputStatusElement) {
+            // Check if status object exists and contains output_state
+            if (channel.status && channel.status.output_state !== undefined) {
+                const isOutputOn = channel.status.output_state === true || channel.status.output_state === 1;
+                
+                if (isOutputOn) {
+                    outputStatusElement.innerHTML = '<span class="output-indicator output-on"></span> Output: ON';
+                } else {
+                    outputStatusElement.innerHTML = '<span class="output-indicator output-off"></span> Output: OFF';
+                }
+            } else {
+                outputStatusElement.innerHTML = '<span class="output-indicator"></span> Output: &ndash;';
+            }
+        }
+        
+        // Update alert status based on status.alarm_state (from Board Status API)
+        const alertStatusElement = dashboardItem.querySelector('.alert-status');
+        if (alertStatusElement) {
+            alertStatusElement.className = 'alert-status';
+            
+            // Check if status object exists and contains alarm_state
+            if (channel.status && channel.status.alarm_state) {
+                alertStatusElement.classList.add('alert-active');
+            }
+        }
+    });
+}
+
+// Enable dashboard edit mode
+function enableDashboardEditMode() {
+    dashboardEditMode = true;
+    
+    // Show/hide buttons
+    document.getElementById('editDashboardBtn').style.display = 'none';
+    document.getElementById('saveDashboardBtn').style.display = 'inline-block';
+    document.getElementById('cancelDashboardBtn').style.display = 'inline-block';
+    
+    // Add edit mode class to container
+    const container = document.getElementById('dashboardItemsContainer');
+    if (container) {
+        container.classList.add('dashboard-edit-mode');
+    }
+    
+    // Initialize sortable
+    initSortable();
+    
+    // Show toast
+    showToast('info', 'Edit Mode', 'Dashboard is now in edit mode. Drag and drop items to rearrange them.');
+}
+
+// Disable dashboard edit mode
+function disableDashboardEditMode() {
+    dashboardEditMode = false;
+    
+    // Show/hide buttons
+    document.getElementById('editDashboardBtn').style.display = 'inline-block';
+    document.getElementById('saveDashboardBtn').style.display = 'none';
+    document.getElementById('cancelDashboardBtn').style.display = 'none';
+    
+    // Remove edit mode class from container
+    const container = document.getElementById('dashboardItemsContainer');
+    if (container) {
+        container.classList.remove('dashboard-edit-mode');
+    }
+    
+    // Reinitialize items (discard changes)
+    loadDashboardItems();
+}
+
+// Initialize sortable for drag & drop reordering
+function initSortable() {
+    const container = document.getElementById('dashboardItemsContainer');
+    if (!container) return;
+    
+    // Check if Sortable library is available
+    if (typeof Sortable !== 'undefined') {
+        // Create new sortable instance
+        new Sortable(container, {
+            animation: 150,
+            ghostClass: 'dashboard-item-placeholder',
+            onEnd: function(evt) {
+                // Update display order of all items
+                const items = container.querySelectorAll('.dashboard-item');
+                items.forEach((item, index) => {
+                    item.dataset.displayOrder = index;
+                });
+            }
+        });
+    } else {
+        console.error('Sortable library not loaded. Please include Sortable.js in your project.');
+        showToast('error', 'Error', 'Sortable library not loaded. Edit mode may not work correctly.');
+        
+        // Load Sortable.js dynamically
+        const script = document.createElement('script');
+        script.src = 'https://cdn.jsdelivr.net/npm/sortablejs@latest/Sortable.min.js';
+        script.onload = function() {
+            initSortable();
+        };
+        document.head.appendChild(script);
+    }
+}
+
+// Save dashboard order
+async function saveDashboardOrder() {
+    try {
+        // Get items from container
+        const container = document.getElementById('dashboardItemsContainer');
+        const items = container.querySelectorAll('.dashboard-item');
+        
+        // Create items array
+        const updatedItems = [];
+        items.forEach((item, index) => {
+            updatedItems.push({
+                board_index: parseInt(item.dataset.boardIndex),
+                channel_index: parseInt(item.dataset.channelIndex),
+                display_order: index
+            });
+        });
+        
+        // Update dashboardItems array
+        dashboardItems = updatedItems.map(item => ({
+            ...dashboardItems.find(
+                existingItem => existingItem.board_index == item.board_index && 
+                               existingItem.channel_index == item.channel_index
+            ),
+            display_order: item.display_order
+        }));
+        
+        // Save to server
+        const response = await fetch('/api/dashboard/order', {
+            method: 'POST',
+            headers: {
+                'Content-Type': 'application/json'
+            },
+            body: JSON.stringify({ items: updatedItems })
+        });
+        
+        const data = await response.json();
+        
+        if (data.status === 'success') {
+            showToast('success', 'Success', 'Dashboard layout saved successfully');
+            disableDashboardEditMode();
+        } else {
+            throw new Error(data.message || 'Failed to save dashboard layout');
+        }
+    } catch (error) {
+        console.error('Error saving dashboard layout:', error);
+        showToast('error', 'Error', 'Failed to save dashboard layout');
+    }
+}
+
+// Initialize dashboard when switching to that tab
+document.addEventListener('DOMContentLoaded', function() {
+    const dashboardTab = document.querySelector('a[data-page="dashboard"]');
+    if (dashboardTab) {
+        dashboardTab.addEventListener('click', function() {
+            // Check if dashboard needs reloading due to board config changes
+            const needsReload = window.dashboardNeedsReload || false;
+            
+            // Reset the flag
+            window.dashboardNeedsReload = false;
+            
+            // Clear any existing refresh interval
+            if (dashboardRefreshInterval) {
+                clearInterval(dashboardRefreshInterval);
+                dashboardRefreshInterval = null;
+            }
+            
+            // Initialize the dashboard (this will load items and start the refresh interval)
+            initDashboard();
+            
+            // If needed, show a toast notification that the dashboard is being refreshed
+            if (needsReload) {
+                showToast('info', 'Dashboard Updated', 'Refreshing dashboard with latest configuration changes');
+            }
+        });
+    }
+    
+    // Initialize dashboard on page load if dashboard tab is active
+    if (document.querySelector('#dashboard').classList.contains('active')) {
+        initDashboard();
     }
 });
