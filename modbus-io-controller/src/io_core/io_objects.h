@@ -74,6 +74,11 @@ struct thermocoupleIO_t {
     char boardName[14];
     uint32_t lastUpdate;
     uint32_t pollTime;
+    uint32_t lastRecord;
+    uint32_t recordInterval;
+    bool recordTemperature[8];
+    bool recordColdJunction[8];
+    bool recordStatus[8];
     thermocoupleModbus_t reg;
     bool coils[32];
     uint16_t holdingRegisters[40]; // first 2 registers are excluded!!! read only

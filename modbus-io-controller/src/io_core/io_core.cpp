@@ -174,9 +174,11 @@ uint8_t assign_address(modbusConfig_t *busCfg) {
     return 0; // No free addresses available
 }
 
+// Analogue digital IO board management functions -------------------------->
 void manage_analogue_digital_io(uint8_t index) {
 }
 
+// Thermocouple IO board management functions ------------------------------>
 void manage_thermocouple(uint8_t index) {
     if (!thermocoupleIO_index.tcIO[index].configInitialised) {
         if (!setup_thermocouple(index)) {
@@ -195,9 +197,11 @@ void manage_thermocouple(uint8_t index) {
         return;
     }
     // Check if polling time has elapsed
-    if(millis() - thermocoupleIO_index.tcIO[index].lastUpdate < thermocoupleIO_index.tcIO[index].pollTime) return;
+    if(millis() - thermocoupleIO_index.tcIO[index].lastUpdate < thermocoupleIO_index.tcIO[index].pollTime) {
+        record_thermocouple(index); // Check if record interval has elapsed before returning
+        return;
+    }
     thermocoupleIO_index.tcIO[index].lastUpdate = millis();
-    log(LOG_DEBUG, false, "Polling thermocouple board at index %d\n", index);
 
     leds.setPixelColor(LED_MODBUS_STATUS, LED_STATUS_BUSY);
     leds.show();
@@ -225,8 +229,10 @@ void manage_thermocouple(uint8_t index) {
         log(LOG_ERROR, true, "Board at index %d is not a thermocouple board. Type: %d, %s\n", index, buf[0], getDeviceTypeName(deviceType_t(buf[0])));
         return;
     }
-    getBoard(index)->connected = true;
-    log(LOG_DEBUG, false, "Board at index %d is online\n", index);
+    if (!getBoard(index)->connected) {
+        getBoard(index)->connected = true;
+        log(LOG_INFO, true, "Board at index %d is online\n", index);
+    }
 
     // Get board status
     retries = 0;
@@ -340,6 +346,9 @@ void manage_thermocouple(uint8_t index) {
         return;
     }
     memcpy(&thermocoupleIO_index.tcIO[index].reg.temperature, inputRegisters, sizeof(inputRegisters));
+
+    // Record temperature data if record interval has elapsed
+    record_thermocouple(index);
 }
 
 bool setup_thermocouple(uint8_t index) {
@@ -380,12 +389,105 @@ bool thermocouple_latch_reset_all(uint8_t index) {
     return thermocoupleIO_index.tcIO[index].bus->writeMultipleCoils(thermocoupleIO_index.tcIO[index].slaveID, TCIO_COIL_LATCH_RESET_PTR, buf, 8);
 }
 
+bool record_thermocouple(uint8_t index) {
+    if (thermocoupleIO_index.tcIO[index].recordInterval != getBoard(index)->recordInterval) {
+        thermocoupleIO_index.tcIO[index].recordInterval = getBoard(index)->recordInterval;
+        if (thermocoupleIO_index.tcIO[index].recordInterval < 15000) {
+            return false;
+        }
+    }
+    if (millis() - thermocoupleIO_index.tcIO[index].lastRecord < thermocoupleIO_index.tcIO[index].recordInterval) return false;
+    if (!thermocoupleIO_index.tcIO[index].configInitialised) return false;
+    if (index >= boardCount) return false;
+    if (!sdInfo.ready) return false;
+
+    // Check for a change in settings since last record
+    bool changed = false;
+    for (int i = 0; i < 8; i++) {
+        if (thermocoupleIO_index.tcIO[index].recordTemperature[i] != getBoard(index)->settings.thermocoupleIO.channels[i].recordTemperature) {
+            thermocoupleIO_index.tcIO[index].recordTemperature[i] = getBoard(index)->settings.thermocoupleIO.channels[i].recordTemperature;
+            changed = true;
+        }
+        if (thermocoupleIO_index.tcIO[index].recordColdJunction[i] != getBoard(index)->settings.thermocoupleIO.channels[i].recordColdJunction) {
+            thermocoupleIO_index.tcIO[index].recordColdJunction[i] = getBoard(index)->settings.thermocoupleIO.channels[i].recordColdJunction;
+            changed = true;
+        }
+        if (thermocoupleIO_index.tcIO[index].recordStatus[i] != getBoard(index)->settings.thermocoupleIO.channels[i].recordStatus) {
+            thermocoupleIO_index.tcIO[index].recordStatus[i] = getBoard(index)->settings.thermocoupleIO.channels[i].recordStatus;
+            changed = true;
+        }
+    }
+
+    char fileName[40];
+    snprintf(fileName, sizeof(fileName), "%s - ID %d sensor records", getBoard(index)->boardName, index);
+    char dataString[500] = {0};
+
+    bool record = false;
+
+    if (changed) { // Build new header string
+        char buf[25];
+        for (int i = 0; i < 8; i++) {
+            if (thermocoupleIO_index.tcIO[index].recordTemperature[i]) {
+                snprintf(buf, sizeof(buf), ",Ch %d Temp", i);
+                strcat(dataString, buf);
+                record = true;
+            }
+            if (thermocoupleIO_index.tcIO[index].recordColdJunction[i]) {
+                snprintf(buf, sizeof(buf), ",Ch %d ColdJ", i);
+                strcat(dataString, buf);
+                record = true;
+            }
+            if (thermocoupleIO_index.tcIO[index].recordStatus[i]) {
+                snprintf(buf, sizeof(buf), ",Ch %d Alarm,Ch %d Out", i, i);
+                strcat(dataString, buf);
+                record = true;
+            }
+        }
+        if (record) {
+            strcat(dataString, "\n");
+            writeSensorData(dataString, fileName, true);
+        }
+    } else {
+        char buf[10];
+        for (int i = 0; i < 8; i++) {
+            if (thermocoupleIO_index.tcIO[index].recordTemperature[i]) {
+                snprintf(buf, sizeof(buf), ",%0.2f", thermocoupleIO_index.tcIO[index].reg.temperature[i]);
+                strcat(dataString, buf);
+                record = true;
+            }
+            if (thermocoupleIO_index.tcIO[index].recordColdJunction[i]) {
+                snprintf(buf, sizeof(buf), ",%0.2f", thermocoupleIO_index.tcIO[index].reg.coldJunction[i]);
+                strcat(dataString, buf);
+                record = true;
+            }
+            if (thermocoupleIO_index.tcIO[index].recordStatus[i]) {
+                bool alarm = thermocoupleIO_index.tcIO[index].reg.alarmState[i] | thermocoupleIO_index.tcIO[index].reg.openCircuit[i] | thermocoupleIO_index.tcIO[index].reg.shortCircuit[i];
+                bool output = thermocoupleIO_index.tcIO[index].reg.outputState[i];
+                snprintf(buf, sizeof(buf), ",%d,%d", alarm, output);
+                strcat(dataString, buf);
+                record = true;
+            }
+        }
+        if (record) {
+            strcat(dataString, "\n");
+            writeSensorData(dataString, fileName, false);
+        }
+    }
+
+    // Update timestamp and return success
+    thermocoupleIO_index.tcIO[index].lastRecord = millis();
+    return true;
+}
+
+// RTD board management functions -------------------------------------------->
 void manage_rtd(uint8_t index) {
 }
 
+// Energy meter board management functions ------------------------------------>
 void manage_energy_meter(uint8_t index) {
 }
 
+// Terminal functions --------------------------------------------------------->
 void print_board_config(uint8_t index) {
     if (index >= boardCount) {
         log(LOG_ERROR, false, "Invalid board index: %d\n", index);

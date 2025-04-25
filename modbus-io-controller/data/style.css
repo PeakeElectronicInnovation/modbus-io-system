@@ -1063,20 +1063,43 @@ h1 {
 
 .channel-form {
     display: grid;
-    grid-template-columns: 1fr 1fr;
+    grid-template-columns: 1fr 1fr 1fr;
     gap: 20px;
 }
 
 .channel-form-left,
+.channel-form-centre,
 .channel-form-right {
     display: flex;
     flex-direction: column;
 }
 
 .channel-form-left {
-    background-color: #f8f9fa;
+    background-color: #fffde6;
     border-radius: 6px;
     padding: 15px;
+}
+
+.channel-form-centre {
+    background-color: #e3f1ff;
+    border-radius: 6px;
+    padding: 15px;
+}
+
+.channel-form-right {
+    background-color: rgb(226, 255, 231);
+    border-radius: 6px;
+    padding: 15px;
+}
+
+.channel-form h4 {
+    margin-bottom: 15px;
+    color: #333;
+    text-align: center;
+    background-color: #ffffff80;
+    padding: 10px;
+    border-radius: 6px;
+    box-shadow: 0 2px 4px rgba(0, 0, 0, 0.1);
 }
 
 .form-control {
@@ -1099,7 +1122,6 @@ h1 {
     display: flex;
     align-items: center;
     margin-bottom: 15px;
-    background-color: #f8f9fa;
     padding: 8px 12px;
     border-radius: 4px;
     transition: background-color 0.2s ease;

@@ -22,7 +22,7 @@ void printSDInfo(void);
 uint64_t getFileSize(const char* path);
 void dateTimeCallback(uint16_t* date, uint16_t* time);
 bool writeLog(const char *message);
-void writeSensorData(/* Sensor data struct to be defined */);
+bool writeSensorData(const char* data, const char* fileName, bool isHeader);
 
 struct sdInfo_t {
   bool inserted;

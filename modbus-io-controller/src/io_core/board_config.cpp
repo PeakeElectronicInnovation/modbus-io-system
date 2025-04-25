@@ -85,7 +85,8 @@ bool loadBoardConfig() {
         boardConfigs[index].boardIndex = board["index"] | 0;
         boardConfigs[index].slaveID = board["slave_id"] | 0;
         boardConfigs[index].modbusPort = board["modbus_port"] | 0;
-        boardConfigs[index].pollTime = board["poll_time"] | 1000;
+        boardConfigs[index].pollTime = board["poll_time"] | 15000;
+        boardConfigs[index].recordInterval = board["record_interval"] | 15000;
         boardConfigs[index].initialised = board["initialised"] | false;
         
         // Load board-specific settings based on type
@@ -103,6 +104,10 @@ bool loadBoardConfig() {
                 boardConfigs[index].settings.thermocoupleIO.channels[channelIndex].tcType = channel["tc_type"] | 0;
                 boardConfigs[index].settings.thermocoupleIO.channels[channelIndex].alertSetpoint = channel["alert_setpoint"] | 0.0f;
                 boardConfigs[index].settings.thermocoupleIO.channels[channelIndex].alertHysteresis = channel["alert_hysteresis"] | 0;
+                boardConfigs[index].settings.thermocoupleIO.channels[channelIndex].recordTemperature = channel["record_temperature"] | false;
+                boardConfigs[index].settings.thermocoupleIO.channels[channelIndex].recordColdJunction = channel["record_cold_junction"] | false;
+                boardConfigs[index].settings.thermocoupleIO.channels[channelIndex].recordStatus = channel["record_status"] | false;
+                boardConfigs[index].settings.thermocoupleIO.channels[channelIndex].showOnDashboard = channel["show_on_dashboard"] | false;
                 
                 channelIndex++;
             }
@@ -147,6 +152,7 @@ bool saveBoardConfig() {
         board["slave_id"] = boardConfigs[i].slaveID;
         board["modbus_port"] = boardConfigs[i].modbusPort;
         board["poll_time"] = boardConfigs[i].pollTime;
+        board["record_interval"] = boardConfigs[i].recordInterval;
         board["initialised"] = boardConfigs[i].initialised;
         
         // Add board-specific settings based on type
@@ -163,6 +169,10 @@ bool saveBoardConfig() {
                 channel["tc_type"] = boardConfigs[i].settings.thermocoupleIO.channels[j].tcType;
                 channel["alert_setpoint"] = boardConfigs[i].settings.thermocoupleIO.channels[j].alertSetpoint;
                 channel["alert_hysteresis"] = boardConfigs[i].settings.thermocoupleIO.channels[j].alertHysteresis;
+                channel["record_temperature"] = boardConfigs[i].settings.thermocoupleIO.channels[j].recordTemperature;
+                channel["record_cold_junction"] = boardConfigs[i].settings.thermocoupleIO.channels[j].recordColdJunction;
+                channel["record_status"] = boardConfigs[i].settings.thermocoupleIO.channels[j].recordStatus;
+                channel["show_on_dashboard"] = boardConfigs[i].settings.thermocoupleIO.channels[j].showOnDashboard;
             }
         }
         // Add more board types as needed
@@ -275,6 +285,7 @@ void handleGetBoardConfig() {
         board["slave_id"] = boardConfigs[i].slaveID;
         board["modbus_port"] = boardConfigs[i].modbusPort;
         board["poll_time"] = boardConfigs[i].pollTime;
+        board["record_interval"] = boardConfigs[i].recordInterval;
         board["initialised"] = boardConfigs[i].initialised; // Add initialization status
         board["connected"] = boardConfigs[i].connected; // Add connection status
         
@@ -292,6 +303,10 @@ void handleGetBoardConfig() {
                 channel["tc_type"] = boardConfigs[i].settings.thermocoupleIO.channels[j].tcType;
                 channel["alert_setpoint"] = boardConfigs[i].settings.thermocoupleIO.channels[j].alertSetpoint;
                 channel["alert_hysteresis"] = boardConfigs[i].settings.thermocoupleIO.channels[j].alertHysteresis;
+                channel["record_temperature"] = boardConfigs[i].settings.thermocoupleIO.channels[j].recordTemperature;
+                channel["record_cold_junction"] = boardConfigs[i].settings.thermocoupleIO.channels[j].recordColdJunction;
+                channel["record_status"] = boardConfigs[i].settings.thermocoupleIO.channels[j].recordStatus;
+                channel["show_on_dashboard"] = boardConfigs[i].settings.thermocoupleIO.channels[j].showOnDashboard;
             }
         }
         // Add more board types as needed
@@ -356,10 +371,11 @@ void handleAddBoard() {
     const char* name = doc["name"] | "Unnamed";
     int type = doc["type"] | 0;
     int modbusPort = doc["modbus_port"] | 0;
-    int pollTime = doc["poll_time"] | 1000;
+    int pollTime = doc["poll_time"] | 15000;
+    int recordInterval = doc["record_interval"] | 15000;
     
-    log(LOG_INFO, true, "Adding board: %s, type: %d, port: %d, poll: %d\n", 
-        name, type, modbusPort, pollTime);
+    log(LOG_INFO, true, "Adding board: %s, type: %d, port: %d, poll: %d, record: %d\n", 
+        name, type, modbusPort, pollTime, recordInterval);
     
     // Create new board config at the end of the array
     BoardConfig newBoard;
@@ -369,6 +385,7 @@ void handleAddBoard() {
     newBoard.slaveID = 1; // Default slave ID
     newBoard.modbusPort = modbusPort;
     newBoard.pollTime = pollTime;
+    newBoard.recordInterval = recordInterval;
     newBoard.initialised = false; // New boards are not initialised by default
     newBoard.connected = false; // New boards are not connected by default
     
@@ -387,6 +404,10 @@ void handleAddBoard() {
                 newBoard.settings.thermocoupleIO.channels[channelIndex].tcType = channel["tc_type"] | 0;
                 newBoard.settings.thermocoupleIO.channels[channelIndex].alertSetpoint = channel["alert_setpoint"] | 0.0f;
                 newBoard.settings.thermocoupleIO.channels[channelIndex].alertHysteresis = channel["alert_hysteresis"] | 0;
+                newBoard.settings.thermocoupleIO.channels[channelIndex].recordTemperature = channel["record_temperature"] | false;
+                newBoard.settings.thermocoupleIO.channels[channelIndex].recordColdJunction = channel["record_cold_junction"] | false;
+                newBoard.settings.thermocoupleIO.channels[channelIndex].recordStatus = channel["record_status"] | false;
+                newBoard.settings.thermocoupleIO.channels[channelIndex].showOnDashboard = channel["show_on_dashboard"] | false;
                 
                 channelIndex++;
             }
@@ -401,6 +422,10 @@ void handleAddBoard() {
                 newBoard.settings.thermocoupleIO.channels[j].tcType = 0;
                 newBoard.settings.thermocoupleIO.channels[j].alertSetpoint = 0.0f;
                 newBoard.settings.thermocoupleIO.channels[j].alertHysteresis = 0;
+                newBoard.settings.thermocoupleIO.channels[j].recordTemperature = false;
+                newBoard.settings.thermocoupleIO.channels[j].recordColdJunction = false;
+                newBoard.settings.thermocoupleIO.channels[j].recordStatus = false;
+                newBoard.settings.thermocoupleIO.channels[j].showOnDashboard = false;
             }
         }
     }
@@ -453,7 +478,7 @@ void handleUpdateBoard() {
     }
     
     // Parse request body
-    DynamicJsonDocument doc(2048);  // Increase buffer size from 1024 to 2048
+    DynamicJsonDocument doc(2048);
     DeserializationError error = deserializeJson(doc, requestData);
     
     if (error) {
@@ -482,7 +507,17 @@ void handleUpdateBoard() {
     }
     
     if (doc.containsKey("poll_time")) {
-        updatedBoard.pollTime = doc["poll_time"];
+        uint32_t pollTime = doc["poll_time"];
+        if (pollTime < 1000) pollTime = 1000; // Minimum 1 second
+        if (pollTime > 3600000) pollTime = 3600000; // Maximum 1 hour
+        updatedBoard.pollTime = pollTime;
+    }
+
+    if (doc.containsKey("record_interval")) {
+        uint32_t recordInterval = doc["record_interval"];
+        if (recordInterval < 15000) recordInterval = 15000; // Minimum 15 seconds
+        if (recordInterval > 3600000) recordInterval = 3600000; // Maximum 1 hour
+        updatedBoard.recordInterval = recordInterval;
     }
     
     // Update board-specific settings based on type
@@ -522,6 +557,22 @@ void handleUpdateBoard() {
                 uint16_t hysteresis = channel["alert_hysteresis"];
                 if (hysteresis > 255) hysteresis = 255;
                 updatedBoard.settings.thermocoupleIO.channels[channelIndex].alertHysteresis = (uint8_t)hysteresis;
+            }
+
+            if (channel.containsKey("record_temperature")) {
+                updatedBoard.settings.thermocoupleIO.channels[channelIndex].recordTemperature = channel["record_temperature"];
+            }
+            
+            if (channel.containsKey("record_cold_junction")) {
+                updatedBoard.settings.thermocoupleIO.channels[channelIndex].recordColdJunction = channel["record_cold_junction"];
+            }
+            
+            if (channel.containsKey("record_status")) {
+                updatedBoard.settings.thermocoupleIO.channels[channelIndex].recordStatus = channel["record_status"];
+            }
+            
+            if (channel.containsKey("show_on_dashboard")) {
+                updatedBoard.settings.thermocoupleIO.channels[channelIndex].showOnDashboard = channel["show_on_dashboard"];
             }
             
             channelIndex++;
@@ -608,6 +659,7 @@ void handleGetAllBoards() {
         board["slave_id"] = boardConfigs[i].slaveID;
         board["modbus_port"] = boardConfigs[i].modbusPort;
         board["poll_time"] = boardConfigs[i].pollTime;
+        board["record_interval"] = boardConfigs[i].recordInterval;
         board["initialised"] = boardConfigs[i].initialised; // Add initialization status
         board["connected"] = boardConfigs[i].connected; // Add connection status
         
@@ -625,6 +677,10 @@ void handleGetAllBoards() {
                 channel["tc_type"] = boardConfigs[i].settings.thermocoupleIO.channels[j].tcType;
                 channel["alert_setpoint"] = boardConfigs[i].settings.thermocoupleIO.channels[j].alertSetpoint;
                 channel["alert_hysteresis"] = boardConfigs[i].settings.thermocoupleIO.channels[j].alertHysteresis;
+                channel["record_temperature"] = boardConfigs[i].settings.thermocoupleIO.channels[j].recordTemperature;
+                channel["record_cold_junction"] = boardConfigs[i].settings.thermocoupleIO.channels[j].recordColdJunction;
+                channel["record_status"] = boardConfigs[i].settings.thermocoupleIO.channels[j].recordStatus;
+                channel["show_on_dashboard"] = boardConfigs[i].settings.thermocoupleIO.channels[j].showOnDashboard;
             }
         }
         // Add more board types as needed

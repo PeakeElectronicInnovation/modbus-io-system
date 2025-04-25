@@ -83,10 +83,6 @@ void mountSD(void) {
             file = sd.open("/logs/system.txt", O_CREAT | O_RDWR | O_APPEND);
             file.close();
         }
-        if (!sd.exists("/sensors/sensors.csv")) {
-            file = sd.open("/sensors/sensors.csv", O_CREAT | O_RDWR | O_APPEND);
-            file.close();
-        }
         sdInfo.ready = true;
     }
     if (sdInfo.ready) log(LOG_INFO, false, "SD card mounted OK\n");
@@ -156,7 +152,6 @@ void printSDInfo(void) {
     log(LOG_INFO, false, "Free space: %0.1f GB\n", sdInfo.cardFreeBytes * 0.000000001);
     log(LOG_INFO, false, "Volume is FAT%d\n", sd.vol()->fatType());
     log(LOG_INFO, false, "Log file size: %0.1f kbytes\n", 0.001 * (float)logFileSize);
-    log(LOG_INFO, false, "Sensor file size: %0.1f kbytes\n", 0.001 * (float)sensorFileSize);
     
     sdLocked = false;
 }
@@ -228,6 +223,65 @@ bool writeLog(const char *message) {
     return true;
 }
 
-void writeSensorData(/* Sensor data struct to be defined */) {
-    // To be implemented
+bool writeSensorData(const char* data, const char* fileName, bool isHeader) {
+    if (sdLocked) return false;
+    sdLocked = true;
+    if (!sdInfo.ready) {
+        sdLocked = false;
+        return false;
+    }
+    sdLocked = false;
+
+    DateTime now;
+    if (!getGlobalDateTime(now, 10)) return false;
+    char dateTimeStr[20];
+    snprintf(dateTimeStr, sizeof(dateTimeStr), "%04d-%02d-%02d %02d:%02d:%02d", now.year, now.month, now.day, now.hour, now.minute, now.second);
+
+    char buf[500];
+
+    // Check if data is header
+    if (isHeader) snprintf(buf, sizeof(buf), "Timestamp%s", data);        
+    else snprintf(buf, sizeof(buf), "%s%s", dateTimeStr, data);
+
+    char fileNameBuf[100];
+    snprintf(fileNameBuf, sizeof(fileNameBuf), "/sensors/%s.csv", fileName);
+
+    // Log file size check
+    uint64_t fileSize = getFileSize(fileNameBuf);
+    sdLocked = true;
+    sdInfo.logSizeBytes = fileSize;
+    if (fileSize > SD_LOG_MAX_SIZE) {
+        // Rename the existing sensor file and create a new one
+        char fNameBuf[100];
+        snprintf(fNameBuf, sizeof(fNameBuf), "/sensors/%s-archive-%04d-%02d-%02d-file", fileName, now.year, now.month, now.day);
+        
+        if (!sd.exists(fNameBuf)) {
+            for (int i = 0; i < 100; i++) {
+                char tempBuf[100];
+                snprintf(tempBuf, sizeof(tempBuf), "%s-%d.csv", fNameBuf, i);
+                if (!sd.exists(tempBuf)) {
+                        strcpy(fNameBuf, tempBuf);
+                        break;
+                    }
+                }
+            }
+            if (sd.exists(fileNameBuf)) {
+                sd.rename(fileNameBuf, fNameBuf);
+            }
+            file = sd.open(fileNameBuf, O_CREAT | O_RDWR | O_APPEND);
+            if (file) {
+                file.print(buf);
+                file.close();
+            }
+        sdLocked = false;
+        return true;
+    }
+    // Otherwise just write to the existing log file
+    file = sd.open(fileNameBuf, O_CREAT | O_RDWR | O_APPEND);
+    if (file) {
+        file.print(buf);
+        file.close();
+    }
+    sdLocked = false;
+    return true;
 }

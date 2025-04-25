@@ -25,6 +25,7 @@ struct BoardConfig {
     uint8_t slaveID;
     uint8_t modbusPort;
     uint32_t pollTime;
+    uint32_t recordInterval;
     bool initialised; // Track if board has been initialised with address assignment
     bool connected;   // Track if board is responding to Modbus requests
     
@@ -39,6 +40,10 @@ struct BoardConfig {
                 uint8_t tcType;
                 float alertSetpoint;
                 uint8_t alertHysteresis;
+                bool recordTemperature;
+                bool recordColdJunction;
+                bool recordStatus;
+                bool showOnDashboard;
             } channels[8];
         } thermocoupleIO;
         

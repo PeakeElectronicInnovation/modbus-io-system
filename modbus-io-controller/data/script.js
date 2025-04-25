@@ -1139,6 +1139,20 @@ async function saveBoardConfiguration() {
     // Validate specific board settings based on type
     let typeSpecificValidationPassed = true;
     let validationErrorMessage = '';
+
+    // Validate poll time
+    const pollTime = parseInt(document.getElementById('pollTime').value);
+    if (isNaN(pollTime) || pollTime < 1 || pollTime > 3600) {
+        typeSpecificValidationPassed = false;
+        validationErrorMessage = 'Poll time must be between 1 second and 1 hour';
+    }
+
+    // Validate record interval
+    const recordInterval = parseInt(document.getElementById('recordInterval').value);
+    if (isNaN(recordInterval) || recordInterval < 15 || recordInterval > 3600) {
+        typeSpecificValidationPassed = false;
+        validationErrorMessage = 'Record interval must be between 15 seconds and 1 hour';
+    }
     
     if (boardType === 'THERMOCOUPLE_IO') {
         // Check hysteresis values for all channels
@@ -1163,7 +1177,8 @@ async function saveBoardConfiguration() {
             name: boardName,
             type: getBoardTypeValue(boardType), // Convert string type to enum value
             modbus_port: parseInt(modbusPort),
-            poll_time: parseInt(document.getElementById('pollTime').value)
+            poll_time: parseInt(document.getElementById('pollTime').value) * 1000,
+            record_interval: parseInt(document.getElementById('recordInterval').value) * 1000
         };
         
         // Add board type specific settings
@@ -1182,7 +1197,11 @@ async function saveBoardConfiguration() {
                     alert_edge: document.getElementById(`alertEdge_${i}`).checked,
                     tc_type: parseInt(document.getElementById(`tcType_${i}`).value),
                     alert_setpoint: alertSetpoint,
-                    alert_hysteresis: alertHysteresis
+                    alert_hysteresis: alertHysteresis,
+                    record_temperature: document.getElementById(`recordTemperature_${i}`).checked,
+                    record_cold_junction: document.getElementById(`recordColdJunction_${i}`).checked,
+                    record_status: document.getElementById(`recordStatus_${i}`).checked,
+                    show_on_dashboard: document.getElementById(`showOnDashboard_${i}`).checked
                 });
             }
         }
@@ -1371,7 +1390,8 @@ function showBoardConfigForm(editIndex = null) {
         
         document.getElementById('boardName').value = board.name || '';
         document.getElementById('modbusPort').value = board.modbus_port;
-        document.getElementById('pollTime').value = board.poll_time;
+        document.getElementById('pollTime').value = board.poll_time / 1000;
+        document.getElementById('recordInterval').value = board.record_interval / 1000;
         
         // Show board type specific settings
         showBoardTypeSettings(typeSelectElement.value);
@@ -1388,6 +1408,10 @@ function showBoardConfigForm(editIndex = null) {
                     document.getElementById(`tcType_${index}`).value = channel.tc_type;
                     document.getElementById(`alertSetpoint_${index}`).value = channel.alert_setpoint;
                     document.getElementById(`alertHysteresis_${index}`).value = channel.alert_hysteresis;
+                    document.getElementById(`recordTemperature_${index}`).checked = channel.record_temperature;
+                    document.getElementById(`recordColdJunction_${index}`).checked = channel.record_cold_junction;
+                    document.getElementById(`recordStatus_${index}`).checked = channel.record_status;
+                    document.getElementById(`showOnDashboard_${index}`).checked = channel.show_on_dashboard;
                 });
             }
         }
@@ -1405,7 +1429,8 @@ function showBoardConfigForm(editIndex = null) {
         document.getElementById('boardType').value = 'THERMOCOUPLE_IO';
         document.getElementById('boardName').value = '';
         document.getElementById('modbusPort').value = '0';
-        document.getElementById('pollTime').value = '1000';
+        document.getElementById('pollTime').value = '15';
+        document.getElementById('recordInterval').value = '15';
         
         // Show default board type settings
         showBoardTypeSettings('THERMOCOUPLE_IO');
@@ -1476,6 +1501,7 @@ function setupThermocoupleChannelTabs() {
         content.innerHTML = `
             <div class="channel-form">
                 <div class="channel-form-left">
+                    <h4>Configuration switches</h4>
                     <div class="checkbox-group">
                         <input type="checkbox" id="alertEnable_${i}" class="form-check">
                         <label for="alertEnable_${i}">Enable temperature alert</label>
@@ -1493,7 +1519,8 @@ function setupThermocoupleChannelTabs() {
                         <label for="alertEdge_${i}">Alert on falling temperature</label>
                     </div>
                 </div>
-                <div class="channel-form-right">
+                <div class="channel-form-centre">
+                    <h4>Thermocouple settings</h4>
                     <div class="form-group">
                         <label for="tcType_${i}">Thermocouple Type:</label>
                         <select id="tcType_${i}" class="form-control">
@@ -1514,7 +1541,26 @@ function setupThermocoupleChannelTabs() {
                     <div class="form-group">
                         <label for="alertHysteresis_${i}">Alert Hysteresis (°C):</label>
                         <input type="number" id="alertHysteresis_${i}" class="form-control" min="0" max="255" step="1" value="0">
-                        <small class="helper-text">Range: 0-255</small>
+                        <small class="helper-text"> Range: 0-255</small>
+                    </div>
+                </div>
+                <div class="channel-form-right">
+                    <h4>Record & display settings</h4>
+                    <div class="checkbox-group">
+                        <input type="checkbox" id="recordTemperature_${i}" class="form-check">
+                        <label for="recordTemperature_${i}">Record temperature</label>
+                    </div>
+                    <div class="checkbox-group">
+                        <input type="checkbox" id="recordColdJunction_${i}" class="form-check">
+                        <label for="recordColdJunction_${i}">Record cold junction</label>
+                    </div>
+                    <div class="checkbox-group">
+                        <input type="checkbox" id="recordStatus_${i}" class="form-check">
+                        <label for="recordStatus_${i}">Record input status</label>
+                    </div>
+                    <div class="checkbox-group">
+                        <input type="checkbox" id="showOnDashboard_${i}" class="form-check">
+                        <label for="showOnDashboard_${i}">Show on dashboard</label>
                     </div>
                 </div>
             </div>

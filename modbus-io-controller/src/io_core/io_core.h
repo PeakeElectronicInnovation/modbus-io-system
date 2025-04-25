@@ -29,11 +29,21 @@ bool apply_thermocouple_config(BoardConfig* config);
 uint8_t findFreeDeviceIndex(void);
 
 // Board specific handlers
+// Analogue digital IO board management functions ------------>
 void manage_analogue_digital_io(uint8_t index);
+
+// Thermocouple board management functions ------------------->
 void manage_thermocouple(uint8_t index);
 bool setup_thermocouple(uint8_t index);
 bool thermocouple_latch_reset(uint8_t index, uint8_t channel);
 bool thermocouple_latch_reset_all(uint8_t index);
+bool record_thermocouple(uint8_t index);
+
+// RTD board management functions ---------------------------->
 void manage_rtd(uint8_t index);
+
+// Energy meter board management functions ------------------->
 void manage_energy_meter(uint8_t index);
+
+// Print board configuration --------------------------------->
 void print_board_config(uint8_t index);
