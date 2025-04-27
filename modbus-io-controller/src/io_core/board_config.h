@@ -40,10 +40,13 @@ struct BoardConfig {
                 uint8_t tcType;
                 float alertSetpoint;
                 uint8_t alertHysteresis;
+                char channelName[33];
                 bool recordTemperature;
                 bool recordColdJunction;
                 bool recordStatus;
                 bool showOnDashboard;
+                bool monitorFault;
+                bool monitorAlarm;
             } channels[8];
         } thermocoupleIO;
         

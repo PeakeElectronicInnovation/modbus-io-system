@@ -1,8 +1,5 @@
 #pragma once
 
-// Forward declaration to avoid circular dependencies
-struct deviceIndex_t;
-
 enum deviceType_t {
     MASTER_CONTROLLER,
     ANALOGUE_DIGITAL_IO,
@@ -31,7 +28,16 @@ struct deviceIndex_t {
 // device type specific indexing (array of 16 devices). The main device index is used to track all devices,
 // with device type specifying which method to access the device with.
 
-// Thermocouple interface board objects
+// Master controller objects (local board IO only) ---------------------->
+struct masterController_t {
+    bool switchOnFault[2];
+    bool switchOnAlarm[2];
+    bool resetFault[2];
+    bool resetAlarm[2];
+};
+// <----------------------- Master controller objects --------------------
+
+// Thermocouple interface board objects --------------------------------->
 // NOTE:Take care that bytes are 32 bit aligned to avoid unintended padding and therefore memcpy issues!
 struct thermocoupleModbus_t { // Thermocouple interface board modbus registers (FC01 - FC04)
     // FC01 - Read Coils    // uint16 address    | uint8 ptr
@@ -92,3 +98,5 @@ struct thermocoupleIO_t {
 struct thermocoupleIO_index_t {
     thermocoupleIO_t tcIO[16];
 };
+
+// <----------------------- Thermocouple interface board objects --------

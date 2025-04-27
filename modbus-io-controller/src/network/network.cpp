@@ -47,8 +47,8 @@ void setupEthernet()
     networkConfig.subnet = IPAddress(255, 255, 255, 0);
     networkConfig.gateway = IPAddress(192, 168, 1, 1);
     networkConfig.dns = IPAddress(8, 8, 8, 8);
-    strcpy(networkConfig.timezone, "+13:00");
-    strcpy(networkConfig.hostname, "modbus-io-system");
+    strcpy(networkConfig.timezone, "+12:00");
+    strcpy(networkConfig.hostname, "sensor-io");
     strcpy(networkConfig.ntpServer, "pool.ntp.org");
     networkConfig.dstEnabled = false;
     saveNetworkConfig();
@@ -59,7 +59,7 @@ void setupEthernet()
   SPI.setSCK(PIN_ETH_SCK);
   SPI.setCS(PIN_ETH_CS);
 
-  eth.setSPISpeed(30000000);
+  eth.setSPISpeed(80000000);
   lwipPollingPeriod(3);
 
   eth.hostname(networkConfig.hostname);

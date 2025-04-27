@@ -432,17 +432,17 @@ bool record_thermocouple(uint8_t index) {
         char buf[25];
         for (int i = 0; i < 8; i++) {
             if (thermocoupleIO_index.tcIO[index].recordTemperature[i]) {
-                snprintf(buf, sizeof(buf), ",Ch %d Temp", i);
+                snprintf(buf, sizeof(buf), ",Ch %d Temp", i+1);
                 strcat(dataString, buf);
                 record = true;
             }
             if (thermocoupleIO_index.tcIO[index].recordColdJunction[i]) {
-                snprintf(buf, sizeof(buf), ",Ch %d ColdJ", i);
+                snprintf(buf, sizeof(buf), ",Ch %d ColdJ", i+1);
                 strcat(dataString, buf);
                 record = true;
             }
             if (thermocoupleIO_index.tcIO[index].recordStatus[i]) {
-                snprintf(buf, sizeof(buf), ",Ch %d Alarm,Ch %d Out", i, i);
+                snprintf(buf, sizeof(buf), ",Ch %d Alarm,Ch %d Out", i+1, i+1);
                 strcat(dataString, buf);
                 record = true;
             }

@@ -11,6 +11,8 @@ document.querySelectorAll('nav a').forEach(link => {
 });
 
 async function updateNetworkInfo() {
+    const settingsTab = document.getElementById('settings');
+    if (!settingsTab || !settingsTab.classList.contains('active')) return;
     try {
         const response = await fetch('/api/network');
         const settings = await response.json();
@@ -83,6 +85,11 @@ async function saveTimeSettings() {
 
 // Update live clock display
 async function updateLiveClock() {
+    // Check if we are in the settings tab or status tab
+    const settingsTab = document.getElementById('settings');
+    const statusTab = document.getElementById('system');
+    if ((!settingsTab || !settingsTab.classList.contains('active')) && (!statusTab || !statusTab.classList.contains('active'))) return;
+    
     const clockElement = document.getElementById('liveClock');
     if (clockElement) {
         try {
@@ -182,7 +189,7 @@ async function loadInitialSettings() {
 }
 
 // Function to load initial network settings
-async function loadNetworkSettings() {
+async function loadNetworkSettings() {    
     try {
         const response = await fetch('/api/network');
         const data = await response.json();
@@ -218,12 +225,7 @@ document.addEventListener('DOMContentLoaded', () => {
     console.log('DOM loaded - initialising board configuration system');
     
     // Load board configurations on page load
-    loadBoardConfigurations();
-    
-    // Set up an auto-refresh for board configurations every 5 seconds for testing
-    console.log("Setting up auto-refresh for board configurations");
-    setInterval(loadBoardConfigurations, 5000);
-    
+    loadBoardConfigurations();    
     loadInitialSettings();  // Load initial NTP and timezone settings
     loadNetworkSettings();  // Load initial network settings
     updateLiveClock();
@@ -478,7 +480,6 @@ document.getElementById('ipConfig').addEventListener('change', function() {
     }
 });
 
-
 // System reboot functionality
 document.addEventListener('DOMContentLoaded', () => {
     const rebootButton = document.getElementById('rebootButton');
@@ -553,7 +554,6 @@ document.addEventListener('DOMContentLoaded', () => {
         });
     }
 });
-
 
 // File Manager functionality
 let fileManagerActive = false;
@@ -909,6 +909,8 @@ function viewFile(path) {
 // Board Configuration
 let boardConfigurations = [];
 let editingBoardIndex = null;
+let connectStatusGlobal = [];
+let initStatusGlobal = [];
 
 // Function to convert board type string to enum value
 function getBoardTypeValue(boardType) {
@@ -1164,6 +1166,20 @@ async function saveBoardConfiguration() {
                 break;
             }
         }
+
+        for (let i = 0; i < 8; i++) {
+            const channelName = document.getElementById(`channelName_${i}`).value;
+            if (!channelName) {
+                typeSpecificValidationPassed = false;
+                validationErrorMessage = `Channel ${i+1}: Custom channel name is required`;
+                break;
+            }
+            else if (channelName.length > 32) {
+                typeSpecificValidationPassed = false;
+                validationErrorMessage = `Channel ${i+1}: Custom channel name must be 32 characters or less`;
+                break;
+            }
+        }
     }
     
     if (!typeSpecificValidationPassed) {
@@ -1198,10 +1214,13 @@ async function saveBoardConfiguration() {
                     tc_type: parseInt(document.getElementById(`tcType_${i}`).value),
                     alert_setpoint: alertSetpoint,
                     alert_hysteresis: alertHysteresis,
+                    channel_name: document.getElementById(`channelName_${i}`).value,
                     record_temperature: document.getElementById(`recordTemperature_${i}`).checked,
                     record_cold_junction: document.getElementById(`recordColdJunction_${i}`).checked,
                     record_status: document.getElementById(`recordStatus_${i}`).checked,
-                    show_on_dashboard: document.getElementById(`showOnDashboard_${i}`).checked
+                    show_on_dashboard: document.getElementById(`showOnDashboard_${i}`).checked,
+                    monitor_fault: document.getElementById(`monitorFault_${i}`).checked,
+                    monitor_alarm: document.getElementById(`monitorAlarm_${i}`).checked
                 });
             }
         }
@@ -1256,6 +1275,8 @@ async function saveBoardConfiguration() {
         console.error('Error saving board configuration:', error);
         showToast('error', 'Error', 'Failed to save board configuration');
     }
+
+    connectStatusRefreshInterval = setInterval(updateBoardsListStatus, 2000);
 }
 
 // Render the list of configured boards - simplified version
@@ -1306,22 +1327,22 @@ function renderSingleBoard(board, index, container) {
     
     // Determine initialisation status
     const initStatus = board.initialised ? 'Initialised' : 'Not Initialised';
-    const initStatusClass = board.initialised ? 'init-status-ok' : 'init-status-pending';
+    const initStatusClass = initStatus === 'Initialised' ? 'init-status-ok' : 'init-status-pending';
     
     // Determine connection status
     const connectStatus = board.connected ? 'Online' : 'Offline';
-    const connectStatusClass = board.connected ? 'connect-status-ok' : 'connect-status-error';
+    const connectStatusClass = connectStatus === 'Online' ? 'connect-status-ok' : 'connect-status-error';
     
     // Create the board item HTML
     boardItem.innerHTML = `
         <div class="board-info">
-            <span class="board-type">${board.name || 'Unnamed Board'}</span>
-            <span class="board-details">Type: ${boardTypeName}, Port: ${portDisplay}</span>
-            <div class="board-status-container">
-                <span class="board-init-status ${initStatusClass}">Status: ${initStatus}</span>
-                <span class="board-connect-status ${connectStatusClass}">Connection: ${connectStatus}</span>
-            </div>
+        <span class="board-type">${board.name || 'Unnamed Board'}</span>
+        <span class="board-details">Type: ${boardTypeName}, Port: ${portDisplay}</span>
+        <div class="board-status-container">
+            <span class="board-init-status ${initStatusClass}" id="init-status-${index}">Status: ${initStatus}</span>
+            <span class="board-connect-status ${connectStatusClass}" id="connect-status-${index}">Connection: ${connectStatus}</span>
         </div>
+    </div>
         <div class="board-actions">
             <button class="btn-edit" data-index="${index}"><i class="fas fa-edit"></i> Edit</button>
             <button class="btn-initialise" data-index="${index}" onclick="console.log('Init button direct click for index ${index}');showInitialisePrompt(${index})"><i class="fas fa-microchip"></i> Initialise</button>
@@ -1351,6 +1372,56 @@ function renderSingleBoard(board, index, container) {
     const deleteBtn = boardItem.querySelector('.btn-delete');
     if (deleteBtn) {
         deleteBtn.addEventListener('click', () => deleteBoard(index));
+    }
+}
+
+function updateBoardsListStatus() {
+    if (document.getElementById('board-config').classList.contains('active')) {
+        loadBoardsListStatus();
+    }
+    // Clear any existing interval
+    if (connectStatusRefreshInterval) {
+        clearInterval(connectStatusRefreshInterval);
+    }
+
+    connectStatusRefreshInterval = setInterval(updateBoardsListStatus, 2000);
+}
+
+async function loadBoardsListStatus() {
+    console.log('Updating boards list connection status...');
+    try {        
+        const response = await fetch(`/api/status`);
+        
+        if (!response.ok) {
+            throw new Error(`HTTP error! status: ${response.status}`);
+        }
+        
+        const boards = await response.json();
+        console.log('Board connection status data:', boards);
+        
+        // Update connection and initialisation status
+        const connectStatus = boards.map(board => board.connected);
+        const initStatus = boards.map(board => board.initialised);
+        
+        // Update connection and initialisation status for each board
+        for (let i = 0; i < boardConfigurations.length; i++) {
+            const initStatusElement = document.getElementById(`init-status-${i}`);
+            if (initStatusElement) {
+                const isInitialised = initStatus[i];
+                initStatusElement.textContent = `Status: ${isInitialised ? 'Initialised' : 'Not Initialised'}`;
+                initStatusElement.className = `board-init-status ${isInitialised ? 'init-status-ok' : 'init-status-pending'}`;
+            }
+
+            const connectStatusElement = document.getElementById(`connect-status-${i}`);
+            if (connectStatusElement) {
+                const isConnected = connectStatus[i];
+                connectStatusElement.textContent = `Connection: ${isConnected ? 'Online' : 'Offline'}`;
+                connectStatusElement.className = `board-connect-status ${isConnected ? 'connect-status-ok' : 'connect-status-error'}`;
+            }
+        }
+    } catch (error) {
+        console.error('Error loading board connection status:', error);
+        showToast('error', 'Error', 'Failed to load board connection status information');
     }
 }
 
@@ -1418,10 +1489,13 @@ function showBoardConfigForm(editIndex = null) {
                     document.getElementById(`tcType_${index}`).value = channel.tc_type;
                     document.getElementById(`alertSetpoint_${index}`).value = channel.alert_setpoint;
                     document.getElementById(`alertHysteresis_${index}`).value = channel.alert_hysteresis;
+                    document.getElementById(`channelName_${index}`).value = channel.channel_name;
                     document.getElementById(`recordTemperature_${index}`).checked = channel.record_temperature;
                     document.getElementById(`recordColdJunction_${index}`).checked = channel.record_cold_junction;
                     document.getElementById(`recordStatus_${index}`).checked = channel.record_status;
                     document.getElementById(`showOnDashboard_${index}`).checked = channel.show_on_dashboard;
+                    document.getElementById(`monitorFault_${index}`).checked = channel.monitor_fault;
+                    document.getElementById(`monitorAlarm_${index}`).checked = channel.monitor_alarm;
                 });
             }
         }
@@ -1528,6 +1602,14 @@ function setupThermocoupleChannelTabs() {
                         <input type="checkbox" id="alertEdge_${i}" class="form-check">
                         <label for="alertEdge_${i}">Alert on falling temperature</label>
                     </div>
+                    <div class="checkbox-group">
+                        <input type="checkbox" id="monitorFault_${i}" class="form-check">
+                        <label for="monitorFault_${i}">Monitor faults</label>
+                    </div>
+                    <div class="checkbox-group">
+                        <input type="checkbox" id="monitorAlarm_${i}" class="form-check">
+                        <label for="monitorAlarm_${i}">Monitor alarms</label>
+                    </div>
                 </div>
                 <div class="channel-form-centre">
                     <h4>Thermocouple settings</h4>
@@ -1552,6 +1634,10 @@ function setupThermocoupleChannelTabs() {
                         <label for="alertHysteresis_${i}">Alert Hysteresis (°C):</label>
                         <input type="number" id="alertHysteresis_${i}" class="form-control" min="0" max="255" step="1" value="0">
                         <small class="helper-text"> Range: 0-255</small>
+                    </div>
+                    <div class="form-group">
+                        <label for="channelName_${i}">Custom channel name:</label>
+                        <input type="text" id="channelName_${i}" class="form-control" value="Channel ${i + 1}">
                     </div>
                 </div>
                 <div class="channel-form-right">
@@ -1601,13 +1687,6 @@ function setupThermocoupleChannelTabs() {
 
 document.addEventListener('DOMContentLoaded', () => {
     console.log('DOM loaded - initialising board configuration system');
-    
-    // Load board configurations on page load
-    loadBoardConfigurations();
-    
-    // Set up an auto-refresh for board configurations every 5 seconds for testing
-    console.log("Setting up auto-refresh for board configurations");
-    setInterval(loadBoardConfigurations, 5000);
     
     // Add tab switching behavior for Board Configuration tab
     const boardConfigTab = document.querySelector('a[data-page="board-config"]');
@@ -1863,6 +1942,7 @@ async function initialiseBoard(index) {
 let boardStatusChart = null;
 let selectedBoardId = null;
 let statusRefreshInterval = null;
+let connectStatusRefreshInterval = null;
 
 // Client-side data storage for temperature history (replacing server-side history)
 const CLIENT_HISTORY_MAX_POINTS = 360; // Maximum number of data points to store (360 points = 30 minutes with 5s refresh)
@@ -1918,8 +1998,8 @@ function initBoardStatusPage() {
         });
     }
     
-    // Start the refresh interval (every 5 seconds)
-    statusRefreshInterval = setInterval(refreshBoardStatus, 5000);
+    // Start the refresh interval (every 2 seconds)
+    statusRefreshInterval = setInterval(refreshBoardStatus, 2000);
 }
 
 // Load the list of boards for the status page
@@ -1931,7 +2011,7 @@ async function loadBoardStatusList() {
             throw new Error(`HTTP error! status: ${response.status}`);
         }
         
-        const data = await response.json();
+        const boards = await response.json();
         const boardSelector = document.getElementById('statusBoardSelect');
         const noBoardsMessage = document.getElementById('noBoardsStatus');
         const boardStatusContent = document.getElementById('boardStatusContent');
@@ -1940,9 +2020,9 @@ async function loadBoardStatusList() {
         boardSelector.innerHTML = '';
         
         // Check if we have boards
-        if (data.boards && data.boards.length > 0) {
+        if (boards && boards.length > 0) {
             // Add options for each board
-            data.boards.forEach(board => {
+            boards.forEach(board => {
                 if (board.connected) {
                     const option = document.createElement('option');
                     option.value = board.id;
@@ -1995,6 +2075,10 @@ async function loadBoardStatus(boardId) {
         document.getElementById('boardInfoSlaveId').textContent = board.slave_id || 'N/A';
         document.getElementById('boardInfoModbusPort').textContent = board.modbus_port !== undefined ? `Port ${board.modbus_port + 1}` : 'N/A';
         document.getElementById('boardInfoPollTime').textContent = board.poll_time ? `${board.poll_time} ms` : 'N/A';
+
+        // Update connection and initialisation status
+        connectStatusGlobal[boardId] = board.connected;
+        initStatusGlobal[boardId] = board.initialised;
         
         // Handle board type specific content
         if (board.type === 'Thermocouple IO') {
@@ -2167,10 +2251,13 @@ function updateThermocoupleChannels(channels) {
             }
         }
         
+        // Use the channel_name field if available, otherwise use a default name
+        const channelName = channel.channel_name || `Channel ${(channel.number !== undefined ? channel.number : i) + 1}`;
+        
         // Card HTML structure with possible reset button
         let cardContent = `
             <div class="channel-card-header">
-                <span class="channel-title">Channel ${(channel.number !== undefined ? channel.number : i) + 1}</span>
+                <span class="channel-title">${channelName}</span>
                 <span class="channel-temp ${tempClass}">${tempDisplay}</span>
             </div>
             <div class="channel-details">
@@ -2341,8 +2428,9 @@ function initBoardStatusPage() {
         resetAllBtn.addEventListener('click', resetAllAlarms);
     }
     
-    // Start the refresh interval (every 5 seconds)
-    statusRefreshInterval = setInterval(refreshBoardStatus, 5000);
+    // Start the refresh interval (every 2 seconds)
+    statusRefreshInterval = setInterval(refreshBoardStatus, 2000);
+
 }
 
 // Update client-side temperature history
@@ -2673,7 +2761,7 @@ async function loadDashboardItems() {
         
         // Start refresh interval if not already running
         if (!dashboardRefreshInterval) {
-            dashboardRefreshInterval = setInterval(refreshDashboardData, 5000);
+            dashboardRefreshInterval = setInterval(refreshDashboardData, 2000);
         }
         
     } catch (error) {
@@ -2721,7 +2809,7 @@ function renderDashboardItems() {
         
         const channelName = document.createElement('div');
         channelName.className = 'channel-name';
-        channelName.textContent = `Channel ${item.channel_index + 1}`;
+        channelName.textContent = item.channel_name;
         
         const temperature = document.createElement('div');
         temperature.className = 'temperature';
@@ -2759,6 +2847,8 @@ function renderDashboardItems() {
 // Refresh dashboard data (temperatures, statuses, etc.)
 async function refreshDashboardData() {
     if (dashboardItems.length === 0) return;
+    const dashboardTab = document.getElementById('dashboard');
+    if (dashboardTab && !dashboardTab.classList.contains('active')) return;
     
     try {
         // Get unique board IDs
@@ -3016,3 +3106,32 @@ document.addEventListener('DOMContentLoaded', function() {
         initDashboard();
     }
 });
+
+// Page loading indicator
+function hideLoadingOverlay() {
+    const overlay = document.getElementById('loadingOverlay');
+    if (overlay) {
+        overlay.style.opacity = '0';
+        setTimeout(() => {
+            overlay.style.display = 'none';
+        }, 300);
+    }
+}
+
+// Show the loading overlay when navigating away from the page
+window.addEventListener('beforeunload', function() {
+    const overlay = document.getElementById('loadingOverlay');
+    if (overlay) {
+        overlay.style.opacity = '1';
+        overlay.style.display = 'flex';
+    }
+});
+
+// Hide loading overlay when page is fully loaded
+window.addEventListener('load', function() {
+    // Wait a short time to ensure all resources are loaded
+    setTimeout(hideLoadingOverlay, 500);
+});
+
+// Also hide loading overlay if it's taking too long (failsafe)
+setTimeout(hideLoadingOverlay, 15000);

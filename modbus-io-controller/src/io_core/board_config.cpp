@@ -44,7 +44,7 @@ bool loadBoardConfig() {
     }
     
     // Allocate a buffer to store contents of the file
-    DynamicJsonDocument doc(4096); // Larger buffer for multiple board configurations
+    DynamicJsonDocument doc(4096);
     DeserializationError error = deserializeJson(doc, configFile);
     configFile.close();
     
@@ -104,10 +104,13 @@ bool loadBoardConfig() {
                 boardConfigs[index].settings.thermocoupleIO.channels[channelIndex].tcType = channel["tc_type"] | 0;
                 boardConfigs[index].settings.thermocoupleIO.channels[channelIndex].alertSetpoint = channel["alert_setpoint"] | 0.0f;
                 boardConfigs[index].settings.thermocoupleIO.channels[channelIndex].alertHysteresis = channel["alert_hysteresis"] | 0;
+                strlcpy(boardConfigs[index].settings.thermocoupleIO.channels[channelIndex].channelName, channel["channel_name"] | "", 33);
                 boardConfigs[index].settings.thermocoupleIO.channels[channelIndex].recordTemperature = channel["record_temperature"] | false;
                 boardConfigs[index].settings.thermocoupleIO.channels[channelIndex].recordColdJunction = channel["record_cold_junction"] | false;
                 boardConfigs[index].settings.thermocoupleIO.channels[channelIndex].recordStatus = channel["record_status"] | false;
                 boardConfigs[index].settings.thermocoupleIO.channels[channelIndex].showOnDashboard = channel["show_on_dashboard"] | false;
+                boardConfigs[index].settings.thermocoupleIO.channels[channelIndex].monitorFault = channel["monitor_fault"] | false;
+                boardConfigs[index].settings.thermocoupleIO.channels[channelIndex].monitorAlarm = channel["monitor_alarm"] | false;
                 
                 channelIndex++;
             }
@@ -118,6 +121,7 @@ bool loadBoardConfig() {
     }
     
     log(LOG_INFO, false, "Loaded %d board configurations\n", boardCount);
+    log(LOG_DEBUG, false, "loadBoardConfig doc size: %d\n", doc.memoryUsage());
     return true;
 }
 
@@ -169,10 +173,13 @@ bool saveBoardConfig() {
                 channel["tc_type"] = boardConfigs[i].settings.thermocoupleIO.channels[j].tcType;
                 channel["alert_setpoint"] = boardConfigs[i].settings.thermocoupleIO.channels[j].alertSetpoint;
                 channel["alert_hysteresis"] = boardConfigs[i].settings.thermocoupleIO.channels[j].alertHysteresis;
+                channel["channel_name"] = boardConfigs[i].settings.thermocoupleIO.channels[j].channelName;
                 channel["record_temperature"] = boardConfigs[i].settings.thermocoupleIO.channels[j].recordTemperature;
                 channel["record_cold_junction"] = boardConfigs[i].settings.thermocoupleIO.channels[j].recordColdJunction;
                 channel["record_status"] = boardConfigs[i].settings.thermocoupleIO.channels[j].recordStatus;
                 channel["show_on_dashboard"] = boardConfigs[i].settings.thermocoupleIO.channels[j].showOnDashboard;
+                channel["monitor_fault"] = boardConfigs[i].settings.thermocoupleIO.channels[j].monitorFault;
+                channel["monitor_alarm"] = boardConfigs[i].settings.thermocoupleIO.channels[j].monitorAlarm;
             }
         }
         // Add more board types as needed
@@ -192,16 +199,9 @@ bool saveBoardConfig() {
         return false;
     }
     
-    // Debug output to validate config
-    String debugOutput;
-    serializeJson(doc, debugOutput);
-    log(LOG_INFO, false, "Board config saved: %s\n", debugOutput.c_str());
+    log(LOG_DEBUG, false, "saveBoardConfig doc size: %d\n", doc.memoryUsage());
     
-    // Close file
     configFile.close();
-    
-    // IMPORTANT: Do NOT call LittleFS.end() here as it will cause "File not found" errors
-    // when serving web content
     
     return true;
 }
@@ -303,10 +303,13 @@ void handleGetBoardConfig() {
                 channel["tc_type"] = boardConfigs[i].settings.thermocoupleIO.channels[j].tcType;
                 channel["alert_setpoint"] = boardConfigs[i].settings.thermocoupleIO.channels[j].alertSetpoint;
                 channel["alert_hysteresis"] = boardConfigs[i].settings.thermocoupleIO.channels[j].alertHysteresis;
+                channel["channel_name"] = boardConfigs[i].settings.thermocoupleIO.channels[j].channelName;
                 channel["record_temperature"] = boardConfigs[i].settings.thermocoupleIO.channels[j].recordTemperature;
                 channel["record_cold_junction"] = boardConfigs[i].settings.thermocoupleIO.channels[j].recordColdJunction;
                 channel["record_status"] = boardConfigs[i].settings.thermocoupleIO.channels[j].recordStatus;
                 channel["show_on_dashboard"] = boardConfigs[i].settings.thermocoupleIO.channels[j].showOnDashboard;
+                channel["monitor_fault"] = boardConfigs[i].settings.thermocoupleIO.channels[j].monitorFault;
+                channel["monitor_alarm"] = boardConfigs[i].settings.thermocoupleIO.channels[j].monitorAlarm;
             }
         }
         // Add more board types as needed
@@ -315,11 +318,11 @@ void handleGetBoardConfig() {
     // Debug the response
     String debugResponse;
     serializeJson(doc, debugResponse);
-    //log(LOG_INFO, false, "API Response: %s\n", debugResponse.c_str());
     
     // Send response
     String response;
     serializeJson(doc, response);
+    log(LOG_DEBUG, false, "handleGetBoardConfig API response size: %d, doc size: %d\n", response.length(), doc.memoryUsage());
     server.send(200, "application/json", response);
 }
 
@@ -356,7 +359,7 @@ void handleAddBoard() {
     }
     
     // Parse JSON request
-    DynamicJsonDocument doc(2048);
+    DynamicJsonDocument doc(4096);
     DeserializationError error = deserializeJson(doc, requestData);
     
     if (error) {
@@ -404,10 +407,13 @@ void handleAddBoard() {
                 newBoard.settings.thermocoupleIO.channels[channelIndex].tcType = channel["tc_type"] | 0;
                 newBoard.settings.thermocoupleIO.channels[channelIndex].alertSetpoint = channel["alert_setpoint"] | 0.0f;
                 newBoard.settings.thermocoupleIO.channels[channelIndex].alertHysteresis = channel["alert_hysteresis"] | 0;
+                strlcpy(newBoard.settings.thermocoupleIO.channels[channelIndex].channelName, channel["channel_name"] | "", 33);
                 newBoard.settings.thermocoupleIO.channels[channelIndex].recordTemperature = channel["record_temperature"] | false;
                 newBoard.settings.thermocoupleIO.channels[channelIndex].recordColdJunction = channel["record_cold_junction"] | false;
                 newBoard.settings.thermocoupleIO.channels[channelIndex].recordStatus = channel["record_status"] | false;
                 newBoard.settings.thermocoupleIO.channels[channelIndex].showOnDashboard = channel["show_on_dashboard"] | false;
+                newBoard.settings.thermocoupleIO.channels[channelIndex].monitorFault = channel["monitor_fault"] | false;
+                newBoard.settings.thermocoupleIO.channels[channelIndex].monitorAlarm = channel["monitor_alarm"] | false;
                 
                 channelIndex++;
             }
@@ -422,13 +428,18 @@ void handleAddBoard() {
                 newBoard.settings.thermocoupleIO.channels[j].tcType = 0;
                 newBoard.settings.thermocoupleIO.channels[j].alertSetpoint = 0.0f;
                 newBoard.settings.thermocoupleIO.channels[j].alertHysteresis = 0;
+                strlcpy(newBoard.settings.thermocoupleIO.channels[j].channelName, "", 33);
                 newBoard.settings.thermocoupleIO.channels[j].recordTemperature = false;
                 newBoard.settings.thermocoupleIO.channels[j].recordColdJunction = false;
                 newBoard.settings.thermocoupleIO.channels[j].recordStatus = false;
                 newBoard.settings.thermocoupleIO.channels[j].showOnDashboard = false;
+                newBoard.settings.thermocoupleIO.channels[j].monitorFault = false;
+                newBoard.settings.thermocoupleIO.channels[j].monitorAlarm = false;
             }
         }
     }
+
+    log(LOG_DEBUG, false, "handleAddBoard API doc size: %d\n", doc.memoryUsage());
     
     // Add the new board
     if (addBoard(newBoard)) {
@@ -478,7 +489,7 @@ void handleUpdateBoard() {
     }
     
     // Parse request body
-    DynamicJsonDocument doc(2048);
+    DynamicJsonDocument doc(4096);
     DeserializationError error = deserializeJson(doc, requestData);
     
     if (error) {
@@ -559,6 +570,10 @@ void handleUpdateBoard() {
                 updatedBoard.settings.thermocoupleIO.channels[channelIndex].alertHysteresis = (uint8_t)hysteresis;
             }
 
+            if (channel.containsKey("channel_name")) {
+                strlcpy(updatedBoard.settings.thermocoupleIO.channels[channelIndex].channelName, channel["channel_name"] | "", 33);
+            }
+
             if (channel.containsKey("record_temperature")) {
                 updatedBoard.settings.thermocoupleIO.channels[channelIndex].recordTemperature = channel["record_temperature"];
             }
@@ -575,10 +590,20 @@ void handleUpdateBoard() {
                 updatedBoard.settings.thermocoupleIO.channels[channelIndex].showOnDashboard = channel["show_on_dashboard"];
             }
             
+            if (channel.containsKey("monitor_fault")) {
+                updatedBoard.settings.thermocoupleIO.channels[channelIndex].monitorFault = channel["monitor_fault"];
+            }
+            
+            if (channel.containsKey("monitor_alarm")) {
+                updatedBoard.settings.thermocoupleIO.channels[channelIndex].monitorAlarm = channel["monitor_alarm"];
+            }
+            
             channelIndex++;
         }
     }
     // Add more board types as needed
+
+    log(LOG_DEBUG, false, "handleUpdateBoard API doc size: %d\n", doc.memoryUsage());
     
     // Update board
     if (updateBoard(boardId, updatedBoard)) {
@@ -677,10 +702,13 @@ void handleGetAllBoards() {
                 channel["tc_type"] = boardConfigs[i].settings.thermocoupleIO.channels[j].tcType;
                 channel["alert_setpoint"] = boardConfigs[i].settings.thermocoupleIO.channels[j].alertSetpoint;
                 channel["alert_hysteresis"] = boardConfigs[i].settings.thermocoupleIO.channels[j].alertHysteresis;
+                channel["channel_name"] = boardConfigs[i].settings.thermocoupleIO.channels[j].channelName;
                 channel["record_temperature"] = boardConfigs[i].settings.thermocoupleIO.channels[j].recordTemperature;
                 channel["record_cold_junction"] = boardConfigs[i].settings.thermocoupleIO.channels[j].recordColdJunction;
                 channel["record_status"] = boardConfigs[i].settings.thermocoupleIO.channels[j].recordStatus;
                 channel["show_on_dashboard"] = boardConfigs[i].settings.thermocoupleIO.channels[j].showOnDashboard;
+                channel["monitor_fault"] = boardConfigs[i].settings.thermocoupleIO.channels[j].monitorFault;
+                channel["monitor_alarm"] = boardConfigs[i].settings.thermocoupleIO.channels[j].monitorAlarm;
             }
         }
         // Add more board types as needed
@@ -689,11 +717,11 @@ void handleGetAllBoards() {
     // Debug the response
     String debugResponse;
     serializeJson(doc, debugResponse);
-    //log(LOG_INFO, false, "API Response: %s\n", debugResponse.c_str());
     
     // Send response
     String response;
     serializeJson(doc, response);
+    log(LOG_DEBUG, false, "handleGetAllBoards API response size: %d, doc size: %d\n", response.length(), doc.memoryUsage());
     server.send(200, "application/json", response);
 }
 

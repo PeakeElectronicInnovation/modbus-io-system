@@ -194,6 +194,7 @@ void handleGetDashboardItems() {
             item["channel_index"] = channelIndex;
             item["display_order"] = dashboardConfig.items[i].displayOrder;
             item["board_type"] = board->type;
+            item["channel_name"] = board->settings.thermocoupleIO.channels[channelIndex].channelName;
         } else {
             // This item is no longer valid, mark for update
             needsUpdate = true;
@@ -231,6 +232,7 @@ void handleGetDashboardItems() {
                             item["channel_index"] = channelIndex;
                             item["display_order"] = dashboardConfig.itemCount;
                             item["board_type"] = board->type;
+                            item["channel_name"] = board->settings.thermocoupleIO.channels[channelIndex].channelName;
                             
                             dashboardConfig.itemCount++;
                             needsUpdate = true;

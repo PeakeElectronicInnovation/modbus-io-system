@@ -48,7 +48,7 @@ void setupBoardStatusAPI() {
     
     // Reset all latched alarms for a board
     server.on("/api/status/reset_all_alarms", HTTP_GET, handleResetAllAlarms);
-    
+        
     log(LOG_INFO, false, "Board status API setup complete\n");
 }
 
@@ -60,79 +60,25 @@ void handleGetAllBoardsStatus() {
     server.sendHeader("Access-Control-Allow-Headers", "Content-Type");
     
     // Create JSON document to hold response
-    DynamicJsonDocument doc(4096);
-    JsonArray boardsArray = doc.createNestedArray("boards");
+    const size_t capacity = JSON_ARRAY_SIZE(MAX_BOARDS) + 
+                           MAX_BOARDS * JSON_OBJECT_SIZE(5); // Each board has 5 basic properties
+    DynamicJsonDocument doc(capacity);
     
-    // Loop through all configured boards and add status information
-    for (int i = 0; i < boardCount; i++) {
+    // Create JSON array for boards
+    JsonArray boardsArray = doc.to<JsonArray>();
+    
+    // Add basic status for each board
+    for (uint8_t i = 0; i < boardCount; i++) {
+        // Get the board configuration
         BoardConfig* config = &boardConfigs[i];
-        JsonObject boardObj = boardsArray.createNestedObject();
         
+        // Add board basic information
+        JsonObject boardObj = boardsArray.createNestedObject();
         boardObj["id"] = i;
         boardObj["name"] = config->boardName;
         boardObj["type"] = getDeviceTypeName(config->type);
         boardObj["initialised"] = config->initialised;
         boardObj["connected"] = config->connected;
-        boardObj["slave_id"] = config->slaveID;
-        boardObj["modbus_port"] = config->modbusPort;
-        
-        // Add basic type-specific information
-        switch (config->type) {
-            case THERMOCOUPLE_IO: {
-                // Get the thermocouple board index
-                uint8_t tcIndex = config->boardIndex;
-                
-                // Add board errors
-                boardObj["modbus_error"] = thermocoupleIO_index.tcIO[tcIndex].modbusError;
-                boardObj["i2c_error"] = thermocoupleIO_index.tcIO[tcIndex].I2CError;
-                boardObj["psu_error"] = thermocoupleIO_index.tcIO[tcIndex].PSUError;
-                boardObj["psu_voltage"] = thermocoupleIO_index.tcIO[tcIndex].Vpsu;
-                
-                // Add average temperature
-                float avgTemp = 0;
-                int validChannels = 0;
-                for (int ch = 0; ch < 8; ch++) {
-                    float temp = thermocoupleIO_index.tcIO[tcIndex].reg.temperature[ch];
-                    // Only count valid temperature readings
-                    if (!thermocoupleIO_index.tcIO[tcIndex].reg.openCircuit[ch] && 
-                        !thermocoupleIO_index.tcIO[tcIndex].reg.shortCircuit[ch] &&
-                        temp > -270) {
-                        avgTemp += temp;
-                        validChannels++;
-                    }
-                }
-                if (validChannels > 0) {
-                    boardObj["avg_temperature"] = avgTemp / validChannels;
-                } else {
-                    boardObj["avg_temperature"] = 0;
-                }
-                
-                // Add alerts count
-                int alertCount = 0;
-                for (int ch = 0; ch < 8; ch++) {
-                    if (thermocoupleIO_index.tcIO[tcIndex].reg.alarmState[ch]) {
-                        alertCount++;
-                    }
-                }
-                boardObj["alert_count"] = alertCount;
-                
-                // Add faults count (open or short circuit)
-                int faultCount = 0;
-                for (int ch = 0; ch < 8; ch++) {
-                    if (thermocoupleIO_index.tcIO[tcIndex].reg.openCircuit[ch] || 
-                        thermocoupleIO_index.tcIO[tcIndex].reg.shortCircuit[ch]) {
-                        faultCount++;
-                    }
-                }
-                boardObj["fault_count"] = faultCount;
-                break;
-            }
-            
-            // Add other board types here as they are implemented
-            default:
-                // No type-specific information for other board types yet
-                break;
-        }
     }
     
     // Return the response
@@ -167,7 +113,7 @@ void handleGetBoardStatus() {
     BoardConfig* config = &boardConfigs[boardId];
     
     // Create JSON document to hold response
-    DynamicJsonDocument doc(3072);
+    DynamicJsonDocument doc(4096);
     
     // Add board information
     doc["id"] = boardId;
@@ -211,6 +157,9 @@ void handleGetBoardStatus() {
                 channelObj["tc_type"] = thermocoupleIO_index.tcIO[tcIndex].reg.type[ch];
                 channelObj["alert_setpoint"] = thermocoupleIO_index.tcIO[tcIndex].reg.alertSP[ch];
                 channelObj["alarm_hysteresis"] = thermocoupleIO_index.tcIO[tcIndex].reg.alarmHyst[ch];
+                
+                // Include the channel name from board configuration
+                channelObj["channel_name"] = config->settings.thermocoupleIO.channels[ch].channelName;
                 
                 // Channel settings
                 JsonObject settingsObj = channelObj.createNestedObject("settings");
@@ -285,7 +234,7 @@ void handleGetThermocoupleData() {
     uint8_t tcIndex = config->boardIndex;
     
     // Create JSON document to hold response
-    DynamicJsonDocument doc(1024);
+    DynamicJsonDocument doc(2048);
     
     // Add basic board information
     doc["id"] = boardId;

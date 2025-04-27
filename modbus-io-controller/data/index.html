@@ -4,12 +4,18 @@
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <link rel="icon" type="image/x-icon" href="favicon.ico">
-    <title>Modbus IO System</title>
+    <title>Sensor Interface System</title>
     <link rel="stylesheet" href="style.css">
     <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
     <script src="https://cdn.jsdelivr.net/npm/sortablejs@latest/Sortable.min.js"></script>
 </head>
 <body>
+    <!-- Loading overlay -->
+    <div id="loadingOverlay" class="loading-overlay">
+        <div class="loading-spinner"></div>
+        <div class="loading-text">Sensor Interface System...</div>
+    </div>
+    
     <div class="container">
         <nav>
             <ul>
@@ -67,7 +73,7 @@
 
             <main>
                 <div id="dashboard" class="page active">
-                    <h1>Modbus IO System Dashboard</h1>
+                    <h1>Sensor Interface System Dashboard</h1>
                     <div class="dashboard-container">
                         <div class="dashboard-header">
                             <div class="dashboard-controls">
@@ -397,7 +403,7 @@
                             </div>
                             <div class="form-group">
                                 <label for="hostName">Hostname:</label>
-                                <input type="text" id="hostName" value="open-reactor">
+                                <input type="text" id="hostName" value="sensor-io">
                             </div>
                             <div class="form-group">
                                 <label for="ntpServer">NTP Server:</label>
