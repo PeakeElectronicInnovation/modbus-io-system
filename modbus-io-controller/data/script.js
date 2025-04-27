@@ -2011,7 +2011,7 @@ let statusRefreshInterval = null;
 let connectStatusRefreshInterval = null;
 
 // Client-side data storage for temperature history (replacing server-side history)
-const CLIENT_HISTORY_MAX_POINTS = 360; // Maximum number of data points to store (360 points = 30 minutes with 5s refresh)
+const CLIENT_HISTORY_MAX_POINTS = 900; // Maximum number of data points to store (900 points = 30 minutes with 2s refresh)
 let clientTemperatureHistory = {
     timestamps: [],
     channels: []

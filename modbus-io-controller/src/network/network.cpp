@@ -42,7 +42,7 @@ void setupEthernet()
     // Set default configuration if load fails
     log(LOG_INFO, false, "Invalid network configuration, using defaults\n");
     networkConfig.ntpEnabled = false;
-    networkConfig.useDHCP = true;
+    networkConfig.useDHCP = false;
     networkConfig.ip = IPAddress(192, 168, 1, 100);
     networkConfig.subnet = IPAddress(255, 255, 255, 0);
     networkConfig.gateway = IPAddress(192, 168, 1, 1);
@@ -226,13 +226,13 @@ bool applyNetworkConfig()
   if (networkConfig.useDHCP)
   {
     // Call eth.end() to release the DHCP lease if we already had one since last boot (handles changing networks on the fly)
-    // NOTE: requires modification of end function in LwipIntDev.h, added dhcp_release_and_stop(&_netif); before netif_remove(&_netif);)
+    // NOTE: requires modification of end function in LwipIntDev.h, added dhcp_release_and_stop(&_netif); before netif_remove(&_netif); line 452)
     eth.end();
     
     if (!eth.begin())
     {
-      log(LOG_WARNING, true, "Failed to configure Ethernet using DHCP, falling back to 192.168.1.10\n");
-      IPAddress defaultIP = {192, 168, 1, 10};
+      log(LOG_WARNING, true, "Failed to configure Ethernet using DHCP, falling back to 192.168.1.100\n");
+      IPAddress defaultIP = {192, 168, 1, 100};
       eth.config(defaultIP);
       if (!eth.begin()) return false;
     }

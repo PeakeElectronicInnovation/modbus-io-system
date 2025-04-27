@@ -44,7 +44,7 @@ bool loadBoardConfig() {
     }
     
     // Allocate a buffer to store contents of the file
-    DynamicJsonDocument doc(4096);
+    DynamicJsonDocument doc(32768);
     DeserializationError error = deserializeJson(doc, configFile);
     configFile.close();
     
@@ -136,7 +136,7 @@ bool saveBoardConfig() {
     }
     
     // Create JSON document
-    DynamicJsonDocument doc(4096); // Larger buffer for multiple board configurations
+    DynamicJsonDocument doc(32768); // Larger buffer for multiple board configurations
     
     // Add magic number and board count
     doc["magic_number"] = BOARD_CONFIG_MAGIC_NUMBER;
@@ -686,7 +686,7 @@ void handleGetAllBoards() {
     }
     
     // Create JSON response
-    DynamicJsonDocument doc(4096);
+    DynamicJsonDocument doc(32768);
     JsonArray boards = doc.createNestedArray("boards");
     
     // Add each board to the JSON response
@@ -832,7 +832,7 @@ void handleImportConfig() {
             }
             
             // Validate JSON format and magic number
-            DynamicJsonDocument doc(4096);
+            DynamicJsonDocument doc(32768);
             DeserializationError error = deserializeJson(doc, validationFile);
             validationFile.close();
             
