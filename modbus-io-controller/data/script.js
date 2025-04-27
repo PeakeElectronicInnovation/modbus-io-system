@@ -264,8 +264,9 @@ document.addEventListener('DOMContentLoaded', () => {
 });
 
 // Update intervals
-setInterval(updateLiveClock, 1000);    // Update clock every second
-setInterval(updateNetworkInfo, 5000);  // Update network info every 5 seconds
+setInterval(updateLiveClock, 1000);         // Update clock every second
+setInterval(updateNetworkInfo, 5000);       // Update network info every 5 seconds
+setInterval(updateBoardsListStatus, 2000);  // Update board connection status every 2 seconds
 
 // Update system status information
 async function updateSystemStatus() {
@@ -318,10 +319,10 @@ async function updateSystemStatus() {
                 document.getElementById('sdSensorSizeContainer').style.display = 'flex';
                 
                 // Update SD card details
-                document.getElementById('sdCapacity').textContent = data.sd.capacityGB.toFixed(1) + ' GB';
-                document.getElementById('sdFreeSpace').textContent = data.sd.freeSpaceGB.toFixed(1) + ' GB';
-                document.getElementById('sdLogSize').textContent = data.sd.logFileSizeKB.toFixed(1) + ' kB';
-                document.getElementById('sdSensorSize').textContent = data.sd.sensorFileSizeKB.toFixed(1) + ' kB';
+                document.getElementById('sdCapacity').textContent = data.sd.capacityGB.toFixed(2) + ' GB';
+                document.getElementById('sdFreeSpace').textContent = data.sd.freeSpaceGB.toFixed(2) + ' GB';
+                document.getElementById('sdLogSize').textContent = data.sd.logFileSizeKB.toFixed(2) + ' kB';
+                document.getElementById('sdSensorSize').textContent = data.sd.sensorFileSizeKB.toFixed(2) + ' kB';
             }
         }
     } catch (error) {
@@ -538,7 +539,7 @@ document.addEventListener('DOMContentLoaded', () => {
                         }
                     }, 1000);
                 } else {
-                    throw new Error('Failed to reboot system');
+                    throw new Error(`HTTP error! status: ${response.status}`);
                 }
             } catch (error) {
                 console.error('Error rebooting system:', error);
@@ -1276,7 +1277,7 @@ async function saveBoardConfiguration() {
         showToast('error', 'Error', 'Failed to save board configuration');
     }
 
-    connectStatusRefreshInterval = setInterval(updateBoardsListStatus, 2000);
+    //connectStatusRefreshInterval = setInterval(updateBoardsListStatus, 2000);
 }
 
 // Render the list of configured boards - simplified version
@@ -1319,12 +1320,6 @@ function renderSingleBoard(board, index, container) {
         boardTypeName = 'Thermocouple IO';
     }
     
-    // Determine port number (add 1 for display since ports are 0-indexed)
-    let portDisplay = 'Unknown';
-    if (board.modbus_port !== undefined) {
-        portDisplay = (parseInt(board.modbus_port) + 1).toString();
-    }
-    
     // Determine initialisation status
     const initStatus = board.initialised ? 'Initialised' : 'Not Initialised';
     const initStatusClass = initStatus === 'Initialised' ? 'init-status-ok' : 'init-status-pending';
@@ -1337,7 +1332,7 @@ function renderSingleBoard(board, index, container) {
     boardItem.innerHTML = `
         <div class="board-info">
         <span class="board-type">${board.name || 'Unnamed Board'}</span>
-        <span class="board-details">Type: ${boardTypeName}, Port: ${portDisplay}</span>
+        <span class="board-details">Type: ${boardTypeName}, Port: ${board.modbus_port + 1}</span>
         <div class="board-status-container">
             <span class="board-init-status ${initStatusClass}" id="init-status-${index}">Status: ${initStatus}</span>
             <span class="board-connect-status ${connectStatusClass}" id="connect-status-${index}">Connection: ${connectStatus}</span>
@@ -1384,7 +1379,7 @@ function updateBoardsListStatus() {
         clearInterval(connectStatusRefreshInterval);
     }
 
-    connectStatusRefreshInterval = setInterval(updateBoardsListStatus, 2000);
+    //connectStatusRefreshInterval = setInterval(updateBoardsListStatus, 2000);
 }
 
 async function loadBoardsListStatus() {
@@ -1702,6 +1697,77 @@ document.addEventListener('DOMContentLoaded', () => {
     if (addBoardBtn) {
         addBoardBtn.addEventListener('click', () => {
             showBoardConfigForm();
+        });
+    }
+    
+    // Export config button click handler
+    const exportConfigBtn = document.getElementById('exportConfigBtn');
+    if (exportConfigBtn) {
+        exportConfigBtn.addEventListener('click', () => {
+            exportBoardConfiguration();
+        });
+    }
+    
+    // Import config button click handler
+    const importConfigBtn = document.getElementById('importConfigBtn');
+    if (importConfigBtn) {
+        importConfigBtn.addEventListener('click', () => {
+            document.getElementById('configFileInput').click();
+        });
+    }
+    
+    // File input change handler for config import
+    const configFileInput = document.getElementById('configFileInput');
+    if (configFileInput) {
+        configFileInput.addEventListener('change', (e) => {
+            importBoardConfiguration(e.target.files[0]);
+        });
+    }
+
+    // Import confirmation modal handlers
+    const importConfirmModal = document.getElementById('importConfirmModal');
+    const cancelImport = document.getElementById('cancelImport');
+    const confirmImport = document.getElementById('confirmImport');
+    const closeImportModal = importConfirmModal?.querySelector('.close');
+
+    if (cancelImport) {
+        cancelImport.addEventListener('click', () => {
+            importConfirmModal.style.display = 'none';
+            // Reset the file input
+            document.getElementById('configFileInput').value = '';
+            window.selectedConfigFile = null;
+        });
+    }
+
+    if (confirmImport) {
+        confirmImport.addEventListener('click', () => {
+            importConfirmModal.style.display = 'none';
+            // Proceed with import using the stored file
+            if (window.selectedConfigFile) {
+                performImport(window.selectedConfigFile);
+                window.selectedConfigFile = null;
+            }
+        });
+    }
+
+    if (closeImportModal) {
+        closeImportModal.addEventListener('click', () => {
+            importConfirmModal.style.display = 'none';
+            // Reset the file input
+            document.getElementById('configFileInput').value = '';
+            window.selectedConfigFile = null;
+        });
+    }
+
+    // Close the modal when clicking outside it
+    if (importConfirmModal) {
+        window.addEventListener('click', (event) => {
+            if (event.target === importConfirmModal) {
+                importConfirmModal.style.display = 'none';
+                // Reset the file input
+                document.getElementById('configFileInput').value = '';
+                window.selectedConfigFile = null;
+            }
         });
     }
     
@@ -2515,7 +2581,7 @@ function updateTemperatureChart(data) {
             } else {
                 // Add new dataset if it doesn't exist
                 boardStatusChart.data.datasets.push({
-                    label: `Channel ${newDataset.number + 1}`,
+                    label: `Ch. ${newDataset.number + 1}`,
                     data: newDataset.data,
                     borderColor: chartColors[i % chartColors.length],
                     backgroundColor: chartColors[i % chartColors.length] + '20', // Add transparency for fill
@@ -3135,3 +3201,99 @@ window.addEventListener('load', function() {
 
 // Also hide loading overlay if it's taking too long (failsafe)
 setTimeout(hideLoadingOverlay, 15000);
+
+// Function to export board configuration
+function exportBoardConfiguration() {
+    console.log('Exporting board configuration');
+    // Show loading toast
+    const loadingToast = showToast('info', 'Exporting...', 'Preparing configuration file for download', 5000);
+    
+    // Create a download link and trigger it
+    const downloadLink = document.createElement('a');
+    downloadLink.href = '/api/boards/export';
+    downloadLink.download = 'board_config.json';
+    
+    // Add event listener to remove loading toast when download starts
+    downloadLink.addEventListener('click', () => {
+        if (loadingToast.parentNode) {
+            loadingToast.parentNode.removeChild(loadingToast);
+        }
+        showToast('success', 'Success', 'Board configuration exported successfully');
+    });
+    
+    // Append, click, and remove
+    document.body.appendChild(downloadLink);
+    downloadLink.click();
+    document.body.removeChild(downloadLink);
+}
+
+// Function to import board configuration
+function importBoardConfiguration(file) {
+    if (!file) {
+        showToast('error', 'Error', 'No file selected for import');
+        return;
+    }
+    
+    console.log('Importing board configuration from file:', file.name);
+    
+    // Check file type
+    if (!file.name.toLowerCase().endsWith('.json')) {
+        showToast('error', 'Error', 'Selected file is not a JSON file');
+        return;
+    }
+    
+    // Store the file temporarily to be used after confirmation
+    window.selectedConfigFile = file;
+    
+    // Show the confirmation modal
+    const importConfirmModal = document.getElementById('importConfirmModal');
+    importConfirmModal.style.display = 'block';
+}
+
+// Function to actually perform the import after confirmation
+function performImport(file) {
+    // Show loading toast
+    const loadingToast = showToast('info', 'Importing...', 'Uploading and validating configuration file', 10000);
+    
+    const xhr = new XMLHttpRequest();
+    const formData = new FormData();
+    formData.append('file', file);
+    
+    xhr.onload = function() {
+        // Remove loading toast
+        if (loadingToast.parentNode) {
+            loadingToast.parentNode.removeChild(loadingToast);
+        }
+        
+        if (xhr.status === 200) {
+            console.log('Import successful:', xhr.responseText);
+            showToast('success', 'Success', 'Board configuration imported successfully');
+            
+            // Refresh the board configurations list after a short delay to allow
+            // the server to fully process the configuration
+            setTimeout(() => {
+                loadBoardConfigurations();
+            }, 500);
+        } else {
+            console.error('Error importing configuration:', xhr.responseText);
+            showToast('error', 'Import Failed', xhr.responseText || 'Failed to import configuration');
+        }
+    };
+    
+    xhr.onerror = function() {
+        // Remove loading toast
+        if (loadingToast.parentNode) {
+            loadingToast.parentNode.removeChild(loadingToast);
+        }
+        
+        console.error('Network error during import');
+        showToast('error', 'Import Failed', 'Network error during file upload');
+    };
+    
+    // Open and send the request
+    xhr.open('POST', '/api/boards/import', true);
+    xhr.send(formData);
+    
+    // Reset the file input
+    document.getElementById('configFileInput').value = '';
+}

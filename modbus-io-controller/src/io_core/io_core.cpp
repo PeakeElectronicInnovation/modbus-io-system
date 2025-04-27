@@ -542,7 +542,7 @@ void handle_faults_and_alarms(void) {
     if (globalAlarm != globalAlarmState) {
         globalAlarmState = globalAlarm;
         if (globalAlarm) {
-            log(LOG_ERROR, true, "Global alarm state is now active\n");
+            log(LOG_WARNING, true, "Global alarm state is now active\n");
         } else {
             log(LOG_INFO, true, "Global alarm cleared\n");
         }
@@ -551,7 +551,7 @@ void handle_faults_and_alarms(void) {
     if (globalFault != globalFaultState) {
         globalFaultState = globalFault;
         if (globalFault) {
-            log(LOG_ERROR, true, "Global fault state is now active\n");
+            log(LOG_WARNING, true, "Global fault state is now active\n");
         } else {
             log(LOG_INFO, true, "Global fault cleared\n");
         }

@@ -71,6 +71,24 @@
                 </div>
             </div>
 
+            <!-- Import confirmation modal -->
+            <div id="importConfirmModal" class="modal" style="display: none;">
+                <div class="modal-content">
+                    <div class="modal-header">
+                        <h2>Confirm Import</h2>
+                        <span class="close">&times;</span>
+                    </div>
+                    <div class="modal-body">
+                        <p>Importing a configuration will <strong>overwrite</strong> all current board configurations.</p>
+                        <p>This action cannot be undone. Are you sure you want to proceed?</p>
+                    </div>
+                    <div class="modal-footer">
+                        <button id="cancelImport" class="btn btn-secondary">Cancel</button>
+                        <button id="confirmImport" class="btn btn-danger">Import and Overwrite</button>
+                    </div>
+                </div>
+            </div>
+
             <main>
                 <div id="dashboard" class="page active">
                     <h1>Sensor Interface System Dashboard</h1>
@@ -79,7 +97,7 @@
                             <div class="dashboard-controls">
                                 <button id="editDashboardBtn" class="btn btn-primary"><i class="fas fa-edit"></i> Edit</button>
                                 <button id="saveDashboardBtn" class="btn btn-primary" style="display: none;"><i class="fas fa-save"></i> Save Layout</button>
-                                <button id="cancelDashboardBtn" class="btn btn-secondary" style="display: none;"><i class="fas fa-times"></i> Cancel</button>
+                                <button id="cancelDashboardBtn" class="btn btn-secondary" style="display: none;"><i class="fas fa-cancel"></i> Cancel</button>
                             </div>
                         </div>
                         
@@ -101,7 +119,9 @@
                             <div class="boards-header">
                                 <h2>Configured Boards</h2>
                                 <div class="board-controls">
-                                    <button id="addBoardBtn" class="btn btn-primary">Add Board</button>
+                                    <button id="addBoardBtn" class="btn btn-primary"><i class="fas fa-plus"></i>Add Board</button>
+                                    <button id="exportConfigBtn" class="btn btn-secondary"><i class="fas fa-download"></i> Export Config</button>
+                                    <button id="importConfigBtn" class="btn btn-secondary"><i class="fas fa-upload"></i> Import Config</button>
                                 </div>
                             </div>
                             <div id="boardsList" class="boards-list">
@@ -167,12 +187,15 @@
                             </div>
 
                             <div class="form-actions">
-                                <button id="cancelBoardConfig" class="btn btn-secondary"><i class="fas fa-times"></i> Cancel</button>
+                                <button id="cancelBoardConfig" class="btn btn-secondary"><i class="fas fa-cancel"></i> Cancel</button>
                                 <button id="saveBoardConfig" class="btn btn-primary"><i class="fas fa-save"></i> Save Board Configuration</button>
                             </div>
                         </div>
                     </div>
                 </div>
+
+                <!-- Hidden file input for config import -->
+                <input type="file" id="configFileInput" style="display: none;" accept=".json">
 
                 <div id="board-status" class="page">
                     <h1>Expansion Board Status</h1>

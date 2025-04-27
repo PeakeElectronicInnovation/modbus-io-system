@@ -67,6 +67,8 @@ void handleUpdateBoard(void);
 void handleDeleteBoard(void);
 void handleGetAllBoards(void);
 void handleInitialiseBoard(void);
+void handleExportConfig(void);
+void handleImportConfig(void);
 
 // Board management functions
 bool addBoard(BoardConfig newBoard);

@@ -253,6 +253,24 @@ void setupBoardConfigAPI() {
     });
     
     server.on("/api/boards/initialise", HTTP_GET, handleInitialiseBoard);
+    
+    // Register export endpoint
+    server.on("/api/boards/export", HTTP_GET, handleExportConfig);
+    
+    // Register import endpoint - with CORS headers
+    server.on("/api/boards/import", HTTP_OPTIONS, []() {
+        server.sendHeader("Access-Control-Allow-Origin", "*");
+        server.sendHeader("Access-Control-Allow-Methods", "POST, OPTIONS");
+        server.sendHeader("Access-Control-Allow-Headers", "Content-Type");
+        server.send(200);
+    });
+    
+    // For file upload, we need to define both the handler for the endpoint and the file upload handler
+    server.on("/api/boards/import", HTTP_POST, []() {
+        // This handler will be called after the file upload is complete
+        server.send(200, "text/plain", "Configuration imported successfully");
+    }, handleImportConfig);
+    
     log(LOG_INFO, false, "Board API setup complete\n");
 }
 
@@ -725,6 +743,233 @@ void handleGetAllBoards() {
     server.send(200, "application/json", response);
 }
 
+void handleExportConfig() {
+    log(LOG_INFO, true, "Exporting board configuration\n");
+    
+    // Check if LittleFS is mounted
+    if (!LittleFS.begin()) {
+        server.send(500, "text/plain", "Failed to mount filesystem");
+        return;
+    }
+    
+    // Check if config file exists
+    if (!LittleFS.exists(BOARD_CONFIG_FILENAME)) {
+        server.send(404, "text/plain", "Board config file not found");
+        return;
+    }
+    
+    // Open config file
+    File configFile = LittleFS.open(BOARD_CONFIG_FILENAME, "r");
+    if (!configFile) {
+        server.send(500, "text/plain", "Failed to open board config file");
+        return;
+    }
+    
+    // Set headers for file download
+    server.sendHeader("Content-Disposition", "attachment; filename=\"board_config.json\"");
+    server.sendHeader("Content-Type", "application/json");
+    
+    // Send file content
+    server.streamFile(configFile, "application/json");
+    configFile.close();
+    
+    log(LOG_INFO, true, "Board configuration exported successfully\n");
+}
+
+void handleImportConfig() {
+    static File configFile;
+    static bool uploadSuccess = false;
+    
+    HTTPUpload& upload = server.upload();
+    
+    if (upload.status == UPLOAD_FILE_START) {
+        log(LOG_INFO, true, "Upload started: %s\n", upload.filename.c_str());
+        
+        // Check if LittleFS is mounted
+        if (!LittleFS.begin()) {
+            log(LOG_WARNING, true, "Failed to mount LittleFS\n");
+            return;
+        }
+        
+        // Create/Open the file for writing
+        configFile = LittleFS.open(BOARD_CONFIG_FILENAME, "w");
+        if (!configFile) {
+            log(LOG_WARNING, true, "Failed to open board config file for writing\n");
+            return;
+        }
+        
+        uploadSuccess = true;
+    } else if (upload.status == UPLOAD_FILE_WRITE) {
+        if (configFile) {
+            // Write the chunk of data to the file
+            size_t written = configFile.write(upload.buf, upload.currentSize);
+            if (written != upload.currentSize) {
+                log(LOG_WARNING, true, "Failed to write file chunk: wrote %d of %d bytes\n", 
+                    written, upload.currentSize);
+                uploadSuccess = false;
+            }
+        }
+    } else if (upload.status == UPLOAD_FILE_END) {
+        log(LOG_INFO, true, "Upload complete: %d bytes\n", upload.totalSize);
+        
+        // Close the file
+        if (configFile) {
+            configFile.close();
+        }
+        
+        if (uploadSuccess) {
+            // Now validate the file and load it
+            if (!LittleFS.begin()) {
+                log(LOG_WARNING, true, "Failed to mount LittleFS for validation\n");
+                return;
+            }
+            
+            // Open config file for reading
+            File validationFile = LittleFS.open(BOARD_CONFIG_FILENAME, "r");
+            if (!validationFile) {
+                log(LOG_WARNING, true, "Failed to open board config file for validation\n");
+                return;
+            }
+            
+            // Validate JSON format and magic number
+            DynamicJsonDocument doc(4096);
+            DeserializationError error = deserializeJson(doc, validationFile);
+            validationFile.close();
+            
+            if (error) {
+                String errorMsg = "Failed to parse config file: " + String(error.c_str());
+                log(LOG_WARNING, true, "%s\n", errorMsg.c_str());
+                uploadSuccess = false;
+                return;
+            }
+            
+            // Validate the magic number
+            uint8_t magicNumber = doc["magic_number"] | 0;
+            if (magicNumber != BOARD_CONFIG_MAGIC_NUMBER) {
+                log(LOG_WARNING, true, "Invalid config file: wrong magic number\n");
+                uploadSuccess = false;
+                return;
+            }
+            
+            // Load the board configuration
+            if (!loadBoardConfig()) {
+                log(LOG_WARNING, true, "Failed to load imported configuration\n");
+                uploadSuccess = false;
+                return;
+            }
+            
+            // Reset initialised flag for all boards since we need to re-initialise them
+            // in the new environment
+            for (uint8_t i = 0; i < boardCount; i++) {
+                boardConfigs[i].initialised = false;
+                boardConfigs[i].connected = false;
+            }
+            
+            // Save the configuration with the reset initialised flags
+            saveBoardConfig();
+            
+            log(LOG_INFO, true, "Board configuration imported successfully\n");
+        } else {
+            log(LOG_WARNING, true, "Upload failed - not validating config\n");
+        }
+    } else if (upload.status == UPLOAD_FILE_ABORTED) {
+        log(LOG_WARNING, true, "Upload aborted\n");
+        uploadSuccess = false;
+        if (configFile) {
+            configFile.close();
+        }
+    }
+}
+
+// Initialise a board by assigning it an address through the Modbus assignment protocol
+void handleInitialiseBoard() {
+    log(LOG_INFO, false, "handleInitialiseBoard called\n");
+    // Add CORS headers
+    server.sendHeader("Access-Control-Allow-Origin", "*");
+    server.sendHeader("Access-Control-Allow-Methods", "GET");
+    server.sendHeader("Access-Control-Allow-Headers", "Content-Type");
+    
+    // Debug info for API call
+    log(LOG_INFO, false, "Board initialisation API called\n");
+    log(LOG_INFO, false, "API has %d arguments\n", server.args());
+    for (int i = 0; i < server.args(); i++) {
+        log(LOG_INFO, false, "Arg[%d] = %s, Value = %s\n", i, server.argName(i).c_str(), server.arg(i).c_str());
+    }
+    
+    // Check if ID parameter is provided
+    if (!server.hasArg("id")) {
+        log(LOG_WARNING, true, "Missing board ID parameter\n");
+        server.send(400, "application/json", "{\"error\":\"Missing board ID parameter\"}");
+        return;
+    }
+    
+    // Get board ID
+    uint8_t boardId = server.arg("id").toInt();
+    log(LOG_INFO, false, "Initialising board with ID: %d\n", boardId);
+    
+    // Check if board exists
+    if (boardId >= boardCount) {
+        log(LOG_WARNING, true, "Board ID %d not found (max: %d)\n", boardId, boardCount);
+        server.send(404, "application/json", "{\"error\":\"Board not found\"}");
+        return;
+    }
+    
+    // Get the board's configured Modbus port
+    uint8_t port = boardConfigs[boardId].modbusPort;
+    
+    log(LOG_INFO, false, "Board is on Modbus port %d\n", port);
+    
+    log(LOG_INFO, false, "Attempting to assign address on port %d\n", port);
+    
+    // Attempt to initialise the board using the correct Modbus configuration
+    modbusConfig_t *busCfg = &modbusConfig[port];
+    
+    
+    // Print current ID assignments
+    log(LOG_INFO, false, "Current assigned IDs on port %d:\n", port);
+    for (int i = 1; i < 10; i++) {
+        log(LOG_INFO, false, "%d: %s ", i, busCfg->idAssigned[i] ? "assigned" : "free");
+    }
+    log(LOG_INFO, false, "\n");
+    
+    // This function communicates with a board in address assignment mode (address 245)
+    // and assigns it a new slave ID
+    uint8_t assigned_id = assign_address(busCfg);
+    
+    log(LOG_INFO, false, "assign_address() returned: %d\n", assigned_id);
+    
+    if (assigned_id > 0) {
+        // Update the board's initialised flag and slave ID
+        boardConfigs[boardId].initialised = true;
+        boardConfigs[boardId].slaveID = assigned_id;
+        
+        // Save the configuration
+        if (saveBoardConfig()) {
+            log(LOG_INFO, true, "Board initialised successfully with slave ID: %d\n", assigned_id);
+            
+            // Create JSON response
+            DynamicJsonDocument responseDoc(256);
+            responseDoc["success"] = true;
+            responseDoc["message"] = "Board initialised successfully";
+            responseDoc["slave_id"] = assigned_id;
+            
+            String response;
+            serializeJson(responseDoc, response);
+            log(LOG_INFO, false, "Sending success response: %s\n", response.c_str());
+            server.send(200, "application/json", response);
+            
+            // Apply the configuration immediately
+            apply_board_configs();
+        } else {
+            log(LOG_WARNING, true, "Failed to save board configuration after initialisation\n");
+            server.send(500, "application/json", "{\"error\":\"Failed to save configuration\"}");
+        }
+    } else {
+        log(LOG_WARNING, true, "Failed to initialise board - no board in assignment mode detected\n");
+        server.send(500, "application/json", "{\"error\":\"Failed to initialise board. Ensure the board is in Address Assignment Mode (blue LED lit).\"}");
+    }
+}
+
 // Board management functions
 bool addBoard(BoardConfig newBoard) {
     // Check if we've reached the maximum number of boards
@@ -849,94 +1094,5 @@ const char* getDeviceTypeName(deviceType_t type) {
             return "Energy Meter";
         default:
             return "Unknown";
-    }
-}
-
-// Initialise a board by assigning it an address through the Modbus assignment protocol
-void handleInitialiseBoard() {
-    log(LOG_INFO, false, "handleInitialiseBoard called\n");
-    // Add CORS headers
-    server.sendHeader("Access-Control-Allow-Origin", "*");
-    server.sendHeader("Access-Control-Allow-Methods", "GET");
-    server.sendHeader("Access-Control-Allow-Headers", "Content-Type");
-    
-    // Debug info for API call
-    log(LOG_INFO, false, "Board initialisation API called\n");
-    log(LOG_INFO, false, "API has %d arguments\n", server.args());
-    for (int i = 0; i < server.args(); i++) {
-        log(LOG_INFO, false, "Arg[%d] = %s, Value = %s\n", i, server.argName(i).c_str(), server.arg(i).c_str());
-    }
-    
-    // Check if ID parameter is provided
-    if (!server.hasArg("id")) {
-        log(LOG_WARNING, true, "Missing board ID parameter\n");
-        server.send(400, "application/json", "{\"error\":\"Missing board ID parameter\"}");
-        return;
-    }
-    
-    // Get board ID
-    uint8_t boardId = server.arg("id").toInt();
-    log(LOG_INFO, false, "Initialising board with ID: %d\n", boardId);
-    
-    // Check if board exists
-    if (boardId >= boardCount) {
-        log(LOG_WARNING, true, "Board ID %d not found (max: %d)\n", boardId, boardCount);
-        server.send(404, "application/json", "{\"error\":\"Board not found\"}");
-        return;
-    }
-    
-    // Get the board's configured Modbus port
-    uint8_t port = boardConfigs[boardId].modbusPort;
-    
-    log(LOG_INFO, false, "Board is on Modbus port %d\n", port);
-    
-    log(LOG_INFO, false, "Attempting to assign address on port %d\n", port);
-    
-    // Attempt to initialise the board using the correct Modbus configuration
-    modbusConfig_t *busCfg = &modbusConfig[port];
-    
-    
-    // Print current ID assignments
-    log(LOG_INFO, false, "Current assigned IDs on port %d:\n", port);
-    for (int i = 1; i < 10; i++) {
-        log(LOG_INFO, false, "%d: %s ", i, busCfg->idAssigned[i] ? "assigned" : "free");
-    }
-    log(LOG_INFO, false, "\n");
-    
-    // This function communicates with a board in address assignment mode (address 245)
-    // and assigns it a new slave ID
-    uint8_t assigned_id = assign_address(busCfg);
-    
-    log(LOG_INFO, false, "assign_address() returned: %d\n", assigned_id);
-    
-    if (assigned_id > 0) {
-        // Update the board's initialised flag and slave ID
-        boardConfigs[boardId].initialised = true;
-        boardConfigs[boardId].slaveID = assigned_id;
-        
-        // Save the configuration
-        if (saveBoardConfig()) {
-            log(LOG_INFO, true, "Board initialised successfully with slave ID: %d\n", assigned_id);
-            
-            // Create JSON response
-            DynamicJsonDocument responseDoc(256);
-            responseDoc["success"] = true;
-            responseDoc["message"] = "Board initialised successfully";
-            responseDoc["slave_id"] = assigned_id;
-            
-            String response;
-            serializeJson(responseDoc, response);
-            log(LOG_INFO, false, "Sending success response: %s\n", response.c_str());
-            server.send(200, "application/json", response);
-            
-            // Apply the configuration immediately
-            apply_board_configs();
-        } else {
-            log(LOG_WARNING, true, "Failed to save board configuration after initialisation\n");
-            server.send(500, "application/json", "{\"error\":\"Failed to save configuration\"}");
-        }
-    } else {
-        log(LOG_WARNING, true, "Failed to initialise board - no board in assignment mode detected\n");
-        server.send(500, "application/json", "{\"error\":\"Failed to initialise board. Ensure the board is in Address Assignment Mode (blue LED lit).\"}");
     }
 }
