@@ -45,5 +45,8 @@ void manage_rtd(uint8_t index);
 // Energy meter board management functions ------------------->
 void manage_energy_meter(uint8_t index);
 
+// Fault and alarm handling functions ------------------------>
+void handle_faults_and_alarms(void);
+
 // Print board configuration --------------------------------->
 void print_board_config(uint8_t index);

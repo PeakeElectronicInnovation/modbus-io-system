@@ -25,6 +25,11 @@ void init_io_core(void) {
     bus1.begin(500000);
     bus2.begin(500000);
 
+    pinMode(PIN_ALM_LED, OUTPUT);
+    pinMode(PIN_ALM_SOUNDER, OUTPUT);
+    digitalWrite(PIN_ALM_LED, LOW);
+    digitalWrite(PIN_ALM_SOUNDER, LOW);
+
     // Initialise board configuration
     init_board_config();
 
@@ -351,6 +356,9 @@ void manage_thermocouple(uint8_t index) {
     }
     memcpy(&thermocoupleIO_index.tcIO[index].reg.temperature, inputRegisters, sizeof(inputRegisters));
 
+    // Handle monitored faults and alarms
+    handle_faults_and_alarms();
+
     // Record temperature data if record interval has elapsed
     record_thermocouple(index);
 }
@@ -489,6 +497,69 @@ void manage_rtd(uint8_t index) {
 
 // Energy meter board management functions ------------------------------------>
 void manage_energy_meter(uint8_t index) {
+}
+
+// Fault and alarm handling functions ----------------------------------------->
+void handle_faults_and_alarms(void) {
+    bool globalFault = false;
+    bool globalAlarm = false;
+
+    static bool globalFaultState = false;
+    static bool globalAlarmState = false;
+
+    // Check for faults and alarms on all boards
+    for (int i = 0; i < boardCount; i++) {
+        if (getBoard(i)->connected && getBoard(i)->initialised) {
+            // Check for faults and alarms by board type
+            switch (getBoard(i)->type) {
+                case THERMOCOUPLE_IO: // ----------------------->
+                    for (int j; j < 8; j++) {
+                        // Check for alarm monitoring enabled and alarm state
+                        if (getBoard(i)->settings.thermocoupleIO.channels[j].monitorAlarm) {
+                            if (thermocoupleIO_index.tcIO[i].reg.alarmState[j]) {
+                                globalAlarm = true;
+                                break;
+                            }
+                        }
+
+                        // Check for fault monitoring enabled and fault state
+                        if (getBoard(i)->settings.thermocoupleIO.channels[j].monitorFault) {
+                            if (thermocoupleIO_index.tcIO[i].reg.openCircuit[j] || thermocoupleIO_index.tcIO[i].reg.shortCircuit[j]) {
+                                globalFault = true;
+                                break;
+                            }
+                        }
+                    }
+                    
+                    break; // <---------------------------------|
+                // Add more board types as needed
+                default:
+                    break;
+            }
+        }
+    }
+
+    if (globalAlarm != globalAlarmState) {
+        globalAlarmState = globalAlarm;
+        if (globalAlarm) {
+            log(LOG_ERROR, true, "Global alarm state is now active\n");
+        } else {
+            log(LOG_INFO, true, "Global alarm cleared\n");
+        }
+    }
+
+    if (globalFault != globalFaultState) {
+        globalFaultState = globalFault;
+        if (globalFault) {
+            log(LOG_ERROR, true, "Global fault state is now active\n");
+        } else {
+            log(LOG_INFO, true, "Global fault cleared\n");
+        }
+    }
+
+    
+    digitalWrite(PIN_ALM_LED, globalFault | globalAlarm);
+    digitalWrite(PIN_ALM_SOUNDER, globalAlarm);
 }
 
 // Terminal functions --------------------------------------------------------->
