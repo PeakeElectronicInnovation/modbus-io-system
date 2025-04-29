@@ -359,27 +359,17 @@ document.querySelectorAll('nav a[data-page="system"]').forEach(link => {
 function showToast(type, title, message, duration = 3000) {
     const toastContainer = document.getElementById('toastContainer');
     
-    // Create toast element
     const toast = document.createElement('div');
     toast.className = `toast toast-${type}`;
     
-    // Add icon based on type
     let iconClass = '';
     switch (type) {
-        case 'success':
-            iconClass = '✓';
-            break;
-        case 'error':
-            iconClass = '✗';
-            break;
-        case 'info':
-            iconClass = 'ℹ';
-            break;
-        default:
-            iconClass = 'ℹ';
+        case 'success': iconClass = '✓'; break;
+        case 'error': iconClass = '✗'; break;
+        case 'info': iconClass = 'ℹ'; break;
+        default: iconClass = 'ℹ';
     }
     
-    // Create toast content
     toast.innerHTML = `
         <div class="toast-icon">${iconClass}</div>
         <div class="toast-content">
@@ -388,15 +378,15 @@ function showToast(type, title, message, duration = 3000) {
         </div>
     `;
     
-    // Add to container
     toastContainer.appendChild(toast);
     
-    // Remove after duration
     setTimeout(() => {
         toast.classList.add('toast-exit');
         setTimeout(() => {
-            toastContainer.removeChild(toast);
-        }, 300); // Wait for exit animation to complete
+            if (toastContainer.contains(toast)) {
+                toastContainer.removeChild(toast);
+            }
+        }, 300); // Exit animation delay
     }, duration);
     
     return toast;
@@ -2479,7 +2469,7 @@ function initBoardStatusPage() {
                 loadBoardStatus(selectedBoardId);
                 
                 // Reset the temperature history and chart when switching boards
-                resetTemperatureHistory();
+                resetClientTemperatureHistory();
                 if (boardStatusChart) {
                     boardStatusChart.destroy();
                     boardStatusChart = null;
@@ -2762,19 +2752,41 @@ document.addEventListener('DOMContentLoaded', function() {
     
     // Add Chart.js library dynamically with CDN primary and local fallback
     if (!window.Chart) {
-        const script = document.createElement('script');
+        console.log('Loading Chart.js...');
         
-        // Try to load from CDN first (faster when internet available)
+        // Create a function to load the local version
+        function loadLocalChart() {
+            console.log('Attempting to load local Chart.js');
+            const localScript = document.createElement('script');
+            localScript.src = 'chart.js';
+            localScript.onload = function() {
+                console.log('Local Chart.js loaded successfully');
+            };
+            localScript.onerror = function() {
+                console.error('Failed to load Chart.js from local fallback');
+            };
+            document.head.appendChild(localScript);
+        }
+        
+        // Try CDN first with a timeout
+        const script = document.createElement('script');
         script.src = 'https://cdn.jsdelivr.net/npm/chart.js';
         
-        // If CDN fails, fall back to local version
-        script.onerror = function() {
-            console.log('Failed to load Chart.js from CDN, falling back to local version');
-            script.src = '/chart.js';
-        };
+        // Set a timeout to try local version if CDN is taking too long (likely offline)
+        const timeoutId = setTimeout(function() {
+            console.log('CDN load timeout - falling back to local version');
+            loadLocalChart();
+        }, 3000); // 3 second timeout
         
         script.onload = function() {
-            console.log('Chart.js loaded successfully');
+            clearTimeout(timeoutId); // Cancel the timeout
+            console.log('Chart.js loaded successfully from CDN');
+        };
+        
+        script.onerror = function() {
+            clearTimeout(timeoutId); // Cancel the timeout
+            console.log('Failed to load Chart.js from CDN, falling back to local version');
+            loadLocalChart();
         };
         
         document.head.appendChild(script);
@@ -3296,4 +3308,11 @@ function performImport(file) {
     
     // Reset the file input
     document.getElementById('configFileInput').value = '';
+}
+
+function resetClientTemperatureHistory() {
+    clientTemperatureHistory = {
+        timestamps: [],
+        channels: []
+    };
 }

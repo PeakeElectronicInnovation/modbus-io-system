@@ -364,24 +364,68 @@ void manage_thermocouple(uint8_t index) {
 }
 
 bool setup_thermocouple(uint8_t index) {
+    // Add a small delay before configuring the board to ensure bus is ready
+    // This is particularly important for the second board during startup
+    delay(100);
+    
     uint16_t holdingRegisters[40];
     bool coils[32];
     memcpy(holdingRegisters, &thermocoupleIO_index.tcIO[index].reg.boardName, sizeof(holdingRegisters));
     memcpy(coils, &thermocoupleIO_index.tcIO[index].reg, sizeof(coils));
 
-    // Attempt to load holding registers (excluding first 2 registers)
-    if (!thermocoupleIO_index.tcIO[index].bus->writeMultipleHoldingRegisters(thermocoupleIO_index.tcIO[index].slaveID, EXP_HOLDING_REG_BOARD_NAME, holdingRegisters, 40)) {
+    // Retry mechanism for holding registers
+    int retries = 0;
+    bool success = false;
+    while (retries < 3 && !success) {
+        // Attempt to load holding registers (excluding first 2 registers)
+        success = thermocoupleIO_index.tcIO[index].bus->writeMultipleHoldingRegisters(
+            thermocoupleIO_index.tcIO[index].slaveID, 
+            EXP_HOLDING_REG_BOARD_NAME, 
+            holdingRegisters, 
+            40);
+            
+        if (!success) {
+            log(LOG_WARNING, true, "Failed to write holding registers to board %d (attempt %d/3)\n", 
+                index, retries + 1);
+            retries++;
+            delay(200); // Increasing delay between retries
+        }
+    }
+    
+    if (!success) {
         log(LOG_ERROR, true, "Failed to write holding register config to thermocouple IO board at index %d\n", index);
         return false;
     }
+    
     // Copy holding registers to local buffer
     memcpy(thermocoupleIO_index.tcIO[index].holdingRegisters, holdingRegisters, sizeof(holdingRegisters));
 
-    // Attempt to load coils
-    if (!thermocoupleIO_index.tcIO[index].bus->writeMultipleCoils(thermocoupleIO_index.tcIO[index].slaveID, 0x0000, coils, 32)) {
+    // Reset retry counter for coils
+    retries = 0;
+    success = false;
+    
+    // Retry mechanism for coils
+    while (retries < 3 && !success) {
+        // Attempt to load coils
+        success = thermocoupleIO_index.tcIO[index].bus->writeMultipleCoils(
+            thermocoupleIO_index.tcIO[index].slaveID, 
+            0x0000, 
+            coils, 
+            32);
+            
+        if (!success) {
+            log(LOG_WARNING, true, "Failed to write coils to board %d (attempt %d/3)\n", 
+                index, retries + 1);
+            retries++;
+            delay(200); // Increasing delay between retries
+        }
+    }
+    
+    if (!success) {
         log(LOG_ERROR, true, "Failed to write coil register config to thermocouple IO board at index %d\n", index);
         return false;
     }
+    
     // Copy coils to local buffer
     memcpy(thermocoupleIO_index.tcIO[index].coils, coils, sizeof(coils));
     return true;
@@ -513,7 +557,7 @@ void handle_faults_and_alarms(void) {
             // Check for faults and alarms by board type
             switch (getBoard(i)->type) {
                 case THERMOCOUPLE_IO: // ----------------------->
-                    for (int j; j < 8; j++) {
+                    for (int j = 0; j < 8; j++) {
                         // Check for alarm monitoring enabled and alarm state
                         if (getBoard(i)->settings.thermocoupleIO.channels[j].monitorAlarm) {
                             if (thermocoupleIO_index.tcIO[i].reg.alarmState[j]) {
