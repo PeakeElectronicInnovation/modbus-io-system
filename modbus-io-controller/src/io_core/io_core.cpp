@@ -22,6 +22,8 @@ void init_io_core(void) {
     Serial1.setRX(PIN_RS485_RX_1);
     Serial2.setTX(PIN_RS485_TX_2);
     Serial2.setRX(PIN_RS485_RX_2);
+    Serial1.setFIFOSize(128);
+    Serial2.setFIFOSize(128);
     bus1.begin(500000);
     bus2.begin(500000);
 
