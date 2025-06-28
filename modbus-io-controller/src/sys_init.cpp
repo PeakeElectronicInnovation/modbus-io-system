@@ -5,6 +5,9 @@
 bool core0setupComplete = false;
 bool core1setupComplete = false;
 
+// Ensure both cores have an 8k stack size (default is to split 8k accross both cores)
+bool core1_separate_stack = true;
+
 bool debug = true;
 
 void init_core0(void);

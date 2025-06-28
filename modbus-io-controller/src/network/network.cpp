@@ -42,7 +42,7 @@ void setupEthernet()
     // Set default configuration if load fails
     log(LOG_INFO, false, "Invalid network configuration, using defaults\n");
     networkConfig.ntpEnabled = false;
-    networkConfig.useDHCP = false;
+    networkConfig.useDHCP = true;
     networkConfig.ip = IPAddress(192, 168, 1, 100);
     networkConfig.subnet = IPAddress(255, 255, 255, 0);
     networkConfig.gateway = IPAddress(192, 168, 1, 1);
@@ -60,7 +60,6 @@ void setupEthernet()
   SPI.setCS(PIN_ETH_CS);
 
   eth.setSPISpeed(80000000);
-  lwipPollingPeriod(3);
 
   eth.hostname(networkConfig.hostname);
 
