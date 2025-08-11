@@ -1262,6 +1262,12 @@ async function saveBoardConfiguration() {
             const success = await sendBoardRequest('/api/boards', 'PUT', boardData, 'Board configuration updated');
             if (!success) return;
         } else {
+            // Check board count limit before adding new board
+            if (boardConfigurations.length >= 8) {
+                showToast('error', 'Board Limit Reached', 'Maximum of 8 boards allowed. Please delete an existing board before adding a new one.');
+                return;
+            }
+            
             // Add new board
             console.log("Sending add request:", JSON.stringify(boardData));
             

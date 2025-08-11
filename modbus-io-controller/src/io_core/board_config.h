@@ -8,7 +8,7 @@
 #define BOARD_CONFIG_MAGIC_NUMBER 0x66
 
 // Maximum number of boards that can be configured
-#define MAX_BOARDS 16
+#define MAX_BOARDS 8
 
 // Maximum board name length (13 chars + null terminator)
 #define MAX_BOARD_NAME_LENGTH 14

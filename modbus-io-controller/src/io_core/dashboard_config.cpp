@@ -48,7 +48,7 @@ bool loadDashboardConfig() {
     }
     
     // Allocate a buffer to store contents of the file
-    DynamicJsonDocument doc(2048); // Buffer for dashboard configuration
+    DynamicJsonDocument doc(4096); // Increased buffer for 80 dashboard items
     DeserializationError error = deserializeJson(doc, configFile);
     configFile.close();
     
@@ -101,7 +101,7 @@ bool saveDashboardConfig() {
     }
     
     // Create JSON document
-    DynamicJsonDocument doc(2048); // Buffer for dashboard configuration
+    DynamicJsonDocument doc(4096); // Increased buffer for 80 dashboard items
     
     // Add magic number and item count
     doc["magic_number"] = DASHBOARD_CONFIG_MAGIC_NUMBER;
@@ -154,7 +154,7 @@ void setupDashboardAPI() {
 // Handle GET request for dashboard items
 void handleGetDashboardItems() {
     // Create JSON document for response
-    DynamicJsonDocument doc(4096);
+    DynamicJsonDocument doc(8192); // Large buffer for 80 dashboard items with full metadata
     
     // Create items array
     JsonArray items = doc.createNestedArray("items");
@@ -220,7 +220,7 @@ void handleGetDashboardItems() {
                     
                     if (!found) {
                         // Add this channel to the dashboard config and response
-                        if (dashboardConfig.itemCount < MAX_BOARDS * 8) {
+                        if (dashboardConfig.itemCount < MAX_DASHBOARD_ITEMS) {
                             dashboardConfig.items[dashboardConfig.itemCount].boardIndex = boardIndex;
                             dashboardConfig.items[dashboardConfig.itemCount].channelIndex = channelIndex;
                             dashboardConfig.items[dashboardConfig.itemCount].displayOrder = dashboardConfig.itemCount;
@@ -262,7 +262,7 @@ void handleSaveDashboardOrder() {
     // Check if request has the correct content type
     if (server.hasArg("plain")) {
         // Parse JSON request
-        DynamicJsonDocument doc(4096);
+        DynamicJsonDocument doc(8196); // Large buffer for 80 dashboard items
         DeserializationError error = deserializeJson(doc, server.arg("plain"));
         
         if (error) {
@@ -279,14 +279,14 @@ void handleSaveDashboardOrder() {
         JsonArray items = doc["items"];
         
         // Temporary arrays to hold the new order
-        uint8_t boardIndices[MAX_BOARDS * 8];
-        uint8_t channelIndices[MAX_BOARDS * 8];
-        uint8_t displayOrders[MAX_BOARDS * 8];
+        uint8_t boardIndices[MAX_DASHBOARD_ITEMS];
+        uint8_t channelIndices[MAX_DASHBOARD_ITEMS];
+        uint8_t displayOrders[MAX_DASHBOARD_ITEMS];
         uint8_t count = 0;
         
         // Process each item
         for (JsonObject item : items) {
-            if (count >= MAX_BOARDS * 8) break;
+            if (count >= MAX_DASHBOARD_ITEMS) break;
             
             // Extract values
             uint8_t boardIndex = item["board_index"] | 0;
@@ -324,7 +324,7 @@ bool addDashboardItem(uint8_t boardIndex, uint8_t channelIndex) {
     }
     
     // Check if we have room for another item
-    if (dashboardConfig.itemCount >= MAX_BOARDS * 8) {
+    if (dashboardConfig.itemCount >= MAX_DASHBOARD_ITEMS) {
         return false;
     }
     
@@ -376,7 +376,7 @@ bool updateDashboardOrder(uint8_t *boardIndices, uint8_t *channelIndices, uint8_
     
     // Add items in new order
     for (uint8_t i = 0; i < count; i++) {
-        if (i >= MAX_BOARDS * 8) break;
+        if (i >= MAX_DASHBOARD_ITEMS) break;
         
         dashboardConfig.items[i].boardIndex = boardIndices[i];
         dashboardConfig.items[i].channelIndex = channelIndices[i];

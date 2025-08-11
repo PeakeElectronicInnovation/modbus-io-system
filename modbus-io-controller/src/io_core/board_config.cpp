@@ -570,36 +570,75 @@ void handleGetAllBoards() {
 }
 
 void handleExportConfig() {
-    log(LOG_INFO, true, "Exporting board configuration\n");
+    log(LOG_INFO, true, "Exporting board configuration from binary storage\n");
     
-    // Check if LittleFS is mounted
-    if (!LittleFS.begin()) {
-        server.send(500, "text/plain", "Failed to mount filesystem");
+    // Check if we have any boards to export
+    if (boardCount == 0) {
+        server.send(200, "application/json", "{\"boards\":[]}");
+        log(LOG_INFO, true, "No boards to export\n");
         return;
     }
     
-    // Check if config file exists
-    if (!LittleFS.exists(BOARD_CONFIG_FILENAME)) {
-        server.send(404, "text/plain", "Board config file not found");
-        return;
+    // Create JSON response using the same logic as handleGetBoardConfig
+    DynamicJsonDocument doc(32768);
+    JsonArray boards = doc.createNestedArray("boards");
+    
+    // Add each board to the JSON response
+    for (uint8_t i = 0; i < boardCount; i++) {
+        JsonObject board = boards.createNestedObject();
+        
+        // Add common board properties
+        board["id"] = i; // Board ID for frontend reference
+        board["name"] = boardConfigs[i].boardName;
+        board["type"] = boardConfigs[i].type;
+        board["type_name"] = getDeviceTypeName(boardConfigs[i].type);
+        board["board_index"] = boardConfigs[i].boardIndex;
+        board["slave_id"] = boardConfigs[i].slaveID;
+        board["modbus_port"] = boardConfigs[i].modbusPort;
+        board["poll_time"] = boardConfigs[i].pollTime;
+        board["record_interval"] = boardConfigs[i].recordInterval;
+        board["initialised"] = boardConfigs[i].initialised;
+        board["connected"] = boardConfigs[i].connected;
+        
+        // Add board-specific settings based on type
+        if (boardConfigs[i].type == THERMOCOUPLE_IO) {
+            JsonArray channels = board.createNestedArray("channels");
+            
+            for (int j = 0; j < 8; j++) {
+                JsonObject channel = channels.createNestedObject();
+                
+                // Add channel properties
+                channel["alert_enable"] = boardConfigs[i].settings.thermocoupleIO.channels[j].alertEnable;
+                channel["output_enable"] = boardConfigs[i].settings.thermocoupleIO.channels[j].outputEnable;
+                channel["alert_latch"] = boardConfigs[i].settings.thermocoupleIO.channels[j].alertLatch;
+                channel["alert_edge"] = boardConfigs[i].settings.thermocoupleIO.channels[j].alertEdge;
+                channel["tc_type"] = boardConfigs[i].settings.thermocoupleIO.channels[j].tcType;
+                channel["alert_setpoint"] = boardConfigs[i].settings.thermocoupleIO.channels[j].alertSetpoint;
+                channel["alert_hysteresis"] = boardConfigs[i].settings.thermocoupleIO.channels[j].alertHysteresis;
+                channel["channel_name"] = boardConfigs[i].settings.thermocoupleIO.channels[j].channelName;
+                channel["record_temperature"] = boardConfigs[i].settings.thermocoupleIO.channels[j].recordTemperature;
+                channel["record_cold_junction"] = boardConfigs[i].settings.thermocoupleIO.channels[j].recordColdJunction;
+                channel["record_status"] = boardConfigs[i].settings.thermocoupleIO.channels[j].recordStatus;
+                channel["show_on_dashboard"] = boardConfigs[i].settings.thermocoupleIO.channels[j].showOnDashboard;
+                channel["monitor_fault"] = boardConfigs[i].settings.thermocoupleIO.channels[j].monitorFault;
+                channel["monitor_alarm"] = boardConfigs[i].settings.thermocoupleIO.channels[j].monitorAlarm;
+            }
+        }
     }
     
-    // Open config file
-    File configFile = LittleFS.open(BOARD_CONFIG_FILENAME, "r");
-    if (!configFile) {
-        server.send(500, "text/plain", "Failed to open board config file");
-        return;
-    }
+    // Convert JSON to string
+    String jsonString;
+    serializeJsonPretty(doc, jsonString);
     
     // Set headers for file download
     server.sendHeader("Content-Disposition", "attachment; filename=\"board_config.json\"");
     server.sendHeader("Content-Type", "application/json");
+    server.sendHeader("Content-Length", String(jsonString.length()));
     
-    // Send file content
-    server.streamFile(configFile, "application/json");
-    configFile.close();
+    // Send JSON content
+    server.send(200, "application/json", jsonString);
     
-    log(LOG_INFO, true, "Board configuration exported successfully\n");
+    log(LOG_INFO, true, "Board configuration exported successfully (%d boards)\n", boardCount);
 }
 
 void handleImportConfig() {
@@ -657,7 +696,7 @@ void handleImportConfig() {
                 return;
             }
             
-            // Validate JSON format and magic number
+            // Parse and validate JSON format
             DynamicJsonDocument doc(32768);
             DeserializationError error = deserializeJson(doc, validationFile);
             validationFile.close();
@@ -669,17 +708,108 @@ void handleImportConfig() {
                 return;
             }
             
-            // Validate the magic number
-            uint8_t magicNumber = doc["magic_number"] | 0;
-            if (magicNumber != BOARD_CONFIG_MAGIC_NUMBER) {
-                log(LOG_WARNING, true, "Invalid config file: wrong magic number\n");
-                uploadSuccess = false;
-                return;
-            }
+            // Check if this is the new export format (has "boards" array) or old format (has magic_number)
+            bool isNewFormat = doc.containsKey("boards");
+            bool isOldFormat = doc.containsKey("magic_number");
             
-            // Load the board configuration
-            if (!loadBoardConfig()) {
-                log(LOG_WARNING, true, "Failed to load imported configuration\n");
+            if (isNewFormat) {
+                log(LOG_INFO, true, "Importing new format configuration file\n");
+                
+                // Parse the new format directly
+                JsonArray boards = doc["boards"];
+                if (!boards) {
+                    log(LOG_WARNING, true, "Invalid config file: missing boards array\n");
+                    uploadSuccess = false;
+                    return;
+                }
+                
+                // Clear existing board configurations
+                boardCount = 0;
+                memset(boardConfigs, 0, sizeof(boardConfigs));
+                
+                // Import each board
+                for (JsonObject board : boards) {
+                    if (boardCount >= MAX_BOARDS) {
+                        log(LOG_WARNING, true, "Too many boards in import file, stopping at %d\n", MAX_BOARDS);
+                        break;
+                    }
+                    
+                    // Create new board config
+                    BoardConfig newBoard;
+                    memset(&newBoard, 0, sizeof(BoardConfig));
+                    
+                    // Import basic board properties
+                    strlcpy(newBoard.boardName, board["name"] | "Imported Board", MAX_BOARD_NAME_LENGTH);
+                    newBoard.type = (deviceType_t)(board["type"] | 0);
+                    newBoard.boardIndex = boardCount;
+                    newBoard.slaveID = board["slave_id"] | 1;
+                    newBoard.modbusPort = board["modbus_port"] | 0;
+                    newBoard.pollTime = board["poll_time"] | 15000;
+                    newBoard.recordInterval = board["record_interval"] | 15000;
+                    newBoard.initialised = false; // Reset for new environment
+                    newBoard.connected = false;   // Reset for new environment
+                    
+                    // Import board-specific settings
+                    if (newBoard.type == THERMOCOUPLE_IO && board.containsKey("channels")) {
+                        JsonArray channels = board["channels"];
+                        int channelIndex = 0;
+                        
+                        for (JsonObject channel : channels) {
+                            if (channelIndex >= 8) break;
+                            
+                            newBoard.settings.thermocoupleIO.channels[channelIndex].alertEnable = channel["alert_enable"] | false;
+                            newBoard.settings.thermocoupleIO.channels[channelIndex].outputEnable = channel["output_enable"] | false;
+                            newBoard.settings.thermocoupleIO.channels[channelIndex].alertLatch = channel["alert_latch"] | false;
+                            newBoard.settings.thermocoupleIO.channels[channelIndex].alertEdge = channel["alert_edge"] | false;
+                            newBoard.settings.thermocoupleIO.channels[channelIndex].tcType = channel["tc_type"] | 0;
+                            newBoard.settings.thermocoupleIO.channels[channelIndex].alertSetpoint = channel["alert_setpoint"] | 0.0;
+                            newBoard.settings.thermocoupleIO.channels[channelIndex].alertHysteresis = channel["alert_hysteresis"] | 0;
+                            strlcpy(newBoard.settings.thermocoupleIO.channels[channelIndex].channelName, 
+                                   channel["channel_name"] | "", 33);
+                            newBoard.settings.thermocoupleIO.channels[channelIndex].recordTemperature = channel["record_temperature"] | false;
+                            newBoard.settings.thermocoupleIO.channels[channelIndex].recordColdJunction = channel["record_cold_junction"] | false;
+                            newBoard.settings.thermocoupleIO.channels[channelIndex].recordStatus = channel["record_status"] | false;
+                            newBoard.settings.thermocoupleIO.channels[channelIndex].showOnDashboard = channel["show_on_dashboard"] | false;
+                            newBoard.settings.thermocoupleIO.channels[channelIndex].monitorFault = channel["monitor_fault"] | false;
+                            newBoard.settings.thermocoupleIO.channels[channelIndex].monitorAlarm = channel["monitor_alarm"] | false;
+                            
+                            channelIndex++;
+                        }
+                    }
+                    
+                    // Add board to configuration
+                    boardConfigs[boardCount] = newBoard;
+                    boardCount++;
+                }
+                
+                // Save the imported configuration in binary format
+                if (!saveBoardConfig()) {
+                    log(LOG_WARNING, true, "Failed to save imported configuration\n");
+                    uploadSuccess = false;
+                    return;
+                }
+                
+                log(LOG_INFO, true, "Successfully imported %d boards from new format\n", boardCount);
+                
+            } else if (isOldFormat) {
+                log(LOG_INFO, true, "Importing old format configuration file\n");
+                
+                // Validate the magic number for old format
+                uint8_t magicNumber = doc["magic_number"] | 0;
+                if (magicNumber != BOARD_CONFIG_MAGIC_NUMBER) {
+                    log(LOG_WARNING, true, "Invalid config file: wrong magic number\n");
+                    uploadSuccess = false;
+                    return;
+                }
+                
+                // Load the board configuration using old method
+                if (!loadBoardConfig()) {
+                    log(LOG_WARNING, true, "Failed to load imported configuration\n");
+                    uploadSuccess = false;
+                    return;
+                }
+            } else {
+                log(LOG_WARNING, true, "Invalid config file: unrecognized format\n");
                 uploadSuccess = false;
                 return;
             }

@@ -7,6 +7,9 @@
 #define DASHBOARD_CONFIG_FILENAME "/dashboard_config.json"
 #define DASHBOARD_CONFIG_MAGIC_NUMBER 0x67
 
+// Maximum dashboard items (64 channels = 8 boards × 8 channels)
+#define MAX_DASHBOARD_ITEMS 64
+
 // Dashboard item structure
 struct DashboardItem {
     uint8_t boardIndex;
@@ -17,7 +20,7 @@ struct DashboardItem {
 // Dashboard configuration structure
 struct DashboardConfig {
     uint8_t itemCount;
-    DashboardItem items[MAX_BOARDS * 8]; // Maximum possible items (all channels on all boards)
+    DashboardItem items[MAX_DASHBOARD_ITEMS]; // Maximum dashboard items (80 channels)
 };
 
 // Dashboard configuration manager APIs
