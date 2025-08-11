@@ -921,94 +921,112 @@ function getBoardTypeValue(boardType) {
     }
 }
 
-// Load board configurations from backend
+// Load board configurations from backend (optimized for binary-backed API)
 async function loadBoardConfigurations() {
-    console.log("ATTEMPTING to fetch board configurations...");
+    console.log("Loading board configurations from binary-backed API...");
     
-    // Use only the known-working endpoint and add retry logic
     const maxRetries = 3;
     let retryCount = 0;
     let lastError = null;
     
     while (retryCount < maxRetries) {
         try {
-            // Add a cache-busting parameter to avoid browser caching
+            // Add cache-busting parameter and optimize headers for binary backend
             const timestamp = new Date().getTime();
             const endpoint = `/api/boards/all?t=${timestamp}`;
             
-            console.log(`Attempt ${retryCount + 1}/${maxRetries} - Trying endpoint: ${endpoint}`);
+            console.log(`Attempt ${retryCount + 1}/${maxRetries} - Fetching from optimized endpoint: ${endpoint}`);
             
             const response = await fetch(endpoint, {
                 method: 'GET',
                 headers: {
+                    'Accept': 'application/json',
                     'Cache-Control': 'no-cache',
                     'Pragma': 'no-cache'
                 }
             });
             
-            // If we got a successful response, process it
             if (response.ok) {
-                console.log(`Successful response from ${endpoint}`);
+                console.log(`✓ Successful response from binary-backed API`);
                 const responseText = await response.text();
-                console.log("Raw board API response:", responseText);
                 
-                // Try to parse the response
+                // Enhanced JSON parsing with better error reporting
                 let data;
                 try {
                     data = JSON.parse(responseText);
                 } catch (parseError) {
-                    console.error("Failed to parse JSON response:", parseError);
-                    throw parseError;
+                    console.error("JSON parse error:", parseError);
+                    console.error("Raw response:", responseText.substring(0, 500));
+                    throw new Error(`Invalid JSON response: ${parseError.message}`);
                 }
                 
-                console.log("Parsed board configurations:", data);
+                // Validate response structure
+                if (!data || typeof data !== 'object') {
+                    throw new Error('Invalid response format: expected object');
+                }
                 
-                if (data && data.boards) {
+                if (data.boards && Array.isArray(data.boards)) {
                     boardConfigurations = data.boards;
-                    console.log("Board configurations set to:", boardConfigurations);
+                    console.log(`✓ Loaded ${boardConfigurations.length} board configurations from binary storage`);
+                    
+                    // Validate each board configuration
+                    boardConfigurations.forEach((board, index) => {
+                        if (!board.hasOwnProperty('id') || !board.hasOwnProperty('name') || !board.hasOwnProperty('type')) {
+                            console.warn(`Board ${index} missing required properties:`, board);
+                        }
+                        if (board.type === 2 && (!board.channels || !Array.isArray(board.channels))) {
+                            console.warn(`Thermocouple board ${index} missing channels array:`, board);
+                        }
+                    });
+                    
                     if (boardConfigurations.length > 0) {
-                        console.log("First board:", boardConfigurations[0]);
+                        console.log("Sample board data:", boardConfigurations[0]);
                     }
                 } else {
                     boardConfigurations = [];
-                    console.log("No board configurations found in response");
+                    console.log("No boards found in response - initializing empty array");
                 }
                 
                 renderBoardsList();
-                return; // Success - exit the retry loop
+                return; // Success - exit retry loop
+                
             } else {
-                throw new Error(`HTTP error! status: ${response.status}`);
+                const errorText = await response.text();
+                throw new Error(`HTTP ${response.status}: ${errorText}`);
             }
+            
         } catch (error) {
             lastError = error;
-            console.error(`Attempt ${retryCount + 1}/${maxRetries} failed:`, error);
+            console.error(`Attempt ${retryCount + 1}/${maxRetries} failed:`, error.message);
             
-            // Exponential backoff for retries
             retryCount++;
             if (retryCount < maxRetries) {
-                const delay = Math.pow(2, retryCount) * 500; // 1s, 2s, 4s, etc.
+                const delay = Math.min(Math.pow(2, retryCount) * 500, 5000); // Cap at 5s
                 console.log(`Retrying in ${delay}ms...`);
                 await new Promise(resolve => setTimeout(resolve, delay));
             }
         }
     }
     
-    // If we get here, all retries failed
-    console.error('Error loading board configurations after all retries:', lastError);
-    showToast('error', 'Error', 'Failed to load board configurations');
+    // All retries failed
+    console.error('✗ Failed to load board configurations after all retries:', lastError?.message);
+    showToast('error', 'Configuration Error', 'Unable to load board configurations. Please check device connection.');
     boardConfigurations = [];
     renderBoardsList();
 }
 
-// Add retry logic for the add/update board request
+// Enhanced board request handler for binary-backed API
 async function sendBoardRequest(url, method, data, successMessage) {
     const maxRetries = 3;
     let retryCount = 0;
     let lastError = null;
     
+    console.log(`Sending ${method} request to binary-backed API:`, url);
+    console.log('Request data:', JSON.stringify(data, null, 2));
+    
     while (retryCount < maxRetries) {
         try {
-            console.log(`Attempt ${retryCount + 1}/${maxRetries} - Sending ${method} request to ${url}`);
+            console.log(`Attempt ${retryCount + 1}/${maxRetries} - ${method} ${url}`);
             
             const response = await fetch(url, {
                 method: method,
@@ -1023,29 +1041,48 @@ async function sendBoardRequest(url, method, data, successMessage) {
             
             if (!response.ok) {
                 const errorText = await response.text();
-                console.error("Server response:", errorText);
-                throw new Error(`HTTP error! status: ${response.status}`);
+                console.error(`Server error (${response.status}):`, errorText);
+                
+                // Try to parse error as JSON for better error messages
+                try {
+                    const errorJson = JSON.parse(errorText);
+                    throw new Error(errorJson.error || `HTTP ${response.status}`);
+                } catch (parseError) {
+                    throw new Error(`HTTP ${response.status}: ${errorText}`);
+                }
+            }
+            
+            // Try to parse success response
+            let responseData = null;
+            try {
+                const responseText = await response.text();
+                if (responseText.trim()) {
+                    responseData = JSON.parse(responseText);
+                    console.log('✓ Server response:', responseData);
+                }
+            } catch (parseError) {
+                console.log('✓ Server responded successfully (no JSON data)');
             }
             
             showToast('success', 'Success', successMessage);
             return true; // Success
+            
         } catch (error) {
             lastError = error;
-            console.error(`Attempt ${retryCount + 1}/${maxRetries} failed:`, error);
+            console.error(`Attempt ${retryCount + 1}/${maxRetries} failed:`, error.message);
             
-            // Exponential backoff for retries
             retryCount++;
             if (retryCount < maxRetries) {
-                const delay = Math.pow(2, retryCount) * 500; // 1s, 2s, 4s, etc.
+                const delay = Math.min(Math.pow(2, retryCount) * 500, 3000); // Cap at 3s
                 console.log(`Retrying in ${delay}ms...`);
                 await new Promise(resolve => setTimeout(resolve, delay));
             }
         }
     }
     
-    // If we get here, all retries failed
-    console.error(`Error after ${maxRetries} retries:`, lastError);
-    showToast('error', 'Error', 'Failed to save board configuration');
+    // All retries failed
+    console.error('✗ Board request failed after all retries:', lastError?.message);
+    showToast('error', 'Request Failed', `Failed to ${method.toLowerCase()} board configuration: ${lastError?.message}`);
     return false;
 }
 

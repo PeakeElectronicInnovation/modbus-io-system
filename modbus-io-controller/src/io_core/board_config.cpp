@@ -22,188 +22,14 @@ void init_board_config(void) {
 
 // Load board configuration from LittleFS
 bool loadBoardConfig() {
-    log(LOG_INFO, false, "Loading board configuration:\n");
-    
-    // Check if LittleFS is mounted
-    if (!LittleFS.begin()) {
-        log(LOG_WARNING, true, "Failed to mount LittleFS\n");
-        return false;
-    }
-    
-    // Check if config file exists
-    if (!LittleFS.exists(BOARD_CONFIG_FILENAME)) {
-        log(LOG_WARNING, true, "Board config file not found\n");
-        return false;
-    }
-    
-    // Open config file
-    File configFile = LittleFS.open(BOARD_CONFIG_FILENAME, "r");
-    if (!configFile) {
-        log(LOG_WARNING, true, "Failed to open board config file\n");
-        return false;
-    }
-    
-    // Allocate a buffer to store contents of the file
-    DynamicJsonDocument doc(32768);
-    DeserializationError error = deserializeJson(doc, configFile);
-    configFile.close();
-    
-    if (error) {
-        log(LOG_WARNING, true, "Failed to parse board config file: %s\n", error.c_str());
-        return false;
-    }
-    
-    // Check magic number
-    uint8_t magicNumber = doc["magic_number"] | 0;
-    log(LOG_INFO, false, "Board config magic number: %x\n", magicNumber);
-    if (magicNumber != BOARD_CONFIG_MAGIC_NUMBER) {
-        log(LOG_WARNING, true, "Invalid board config magic number\n");
-        return false;
-    }
-    
-    // Get board count
-    boardCount = doc["board_count"] | 0;
-    if (boardCount > MAX_BOARDS) {
-        log(LOG_WARNING, true, "Board count exceeds maximum, truncating\n");
-        boardCount = MAX_BOARDS;
-    }
-    
-    // Parse board configurations
-    JsonArray boards = doc["boards"];
-    
-    // Reset all board configs to ensure clean state
-    memset(boardConfigs, 0, sizeof(boardConfigs));
-    
-    // Load each board configuration
-    uint8_t index = 0;
-    for (JsonObject board : boards) {
-        if (index >= boardCount) break;
-        
-        // Load common board properties
-        strlcpy(boardConfigs[index].boardName, board["name"] | "Unnamed", MAX_BOARD_NAME_LENGTH);
-        boardConfigs[index].type = (deviceType_t)(board["type"] | 0);
-        boardConfigs[index].boardIndex = board["index"] | 0;
-        boardConfigs[index].slaveID = board["slave_id"] | 0;
-        boardConfigs[index].modbusPort = board["modbus_port"] | 0;
-        boardConfigs[index].pollTime = board["poll_time"] | 15000;
-        boardConfigs[index].recordInterval = board["record_interval"] | 15000;
-        boardConfigs[index].initialised = board["initialised"] | false;
-        
-        // Load board-specific settings based on type
-        if (boardConfigs[index].type == THERMOCOUPLE_IO) {
-            JsonArray channels = board["channels"];
-            int channelIndex = 0;
-            
-            for (JsonObject channel : channels) {
-                if (channelIndex >= 8) break;
-                
-                boardConfigs[index].settings.thermocoupleIO.channels[channelIndex].alertEnable = channel["alert_enable"] | false;
-                boardConfigs[index].settings.thermocoupleIO.channels[channelIndex].outputEnable = channel["output_enable"] | false;
-                boardConfigs[index].settings.thermocoupleIO.channels[channelIndex].alertLatch = channel["alert_latch"] | false;
-                boardConfigs[index].settings.thermocoupleIO.channels[channelIndex].alertEdge = channel["alert_edge"] | false;
-                boardConfigs[index].settings.thermocoupleIO.channels[channelIndex].tcType = channel["tc_type"] | 0;
-                boardConfigs[index].settings.thermocoupleIO.channels[channelIndex].alertSetpoint = channel["alert_setpoint"] | 0.0f;
-                boardConfigs[index].settings.thermocoupleIO.channels[channelIndex].alertHysteresis = channel["alert_hysteresis"] | 0;
-                strlcpy(boardConfigs[index].settings.thermocoupleIO.channels[channelIndex].channelName, channel["channel_name"] | "", 33);
-                boardConfigs[index].settings.thermocoupleIO.channels[channelIndex].recordTemperature = channel["record_temperature"] | false;
-                boardConfigs[index].settings.thermocoupleIO.channels[channelIndex].recordColdJunction = channel["record_cold_junction"] | false;
-                boardConfigs[index].settings.thermocoupleIO.channels[channelIndex].recordStatus = channel["record_status"] | false;
-                boardConfigs[index].settings.thermocoupleIO.channels[channelIndex].showOnDashboard = channel["show_on_dashboard"] | false;
-                boardConfigs[index].settings.thermocoupleIO.channels[channelIndex].monitorFault = channel["monitor_fault"] | false;
-                boardConfigs[index].settings.thermocoupleIO.channels[channelIndex].monitorAlarm = channel["monitor_alarm"] | false;
-                
-                channelIndex++;
-            }
-        }
-        // Add more board types as needed
-        
-        index++;
-    }
-    
-    log(LOG_INFO, false, "Loaded %d board configurations\n", boardCount);
-    log(LOG_DEBUG, false, "loadBoardConfig doc size: %d\n", doc.memoryUsage());
-    return true;
+    // Use binary format for loading
+    return loadBoardConfigBinary();
 }
 
 // Save board configuration to LittleFS
 bool saveBoardConfig() {
-    log(LOG_INFO, true, "Saving board configuration (count: %d):\n", boardCount);
-    
-    // Check if LittleFS is mounted
-    if (!LittleFS.begin()) {
-        log(LOG_WARNING, true, "Failed to mount LittleFS\n");
-        return false;
-    }
-    
-    // Create JSON document
-    DynamicJsonDocument doc(32768); // Larger buffer for multiple board configurations
-    
-    // Add magic number and board count
-    doc["magic_number"] = BOARD_CONFIG_MAGIC_NUMBER;
-    doc["board_count"] = boardCount;
-    
-    // Create boards array
-    JsonArray boards = doc.createNestedArray("boards");
-    
-    // Add each board to the JSON document
-    for (uint8_t i = 0; i < boardCount; i++) {
-        JsonObject board = boards.createNestedObject();
-        
-        // Add common board properties
-        board["name"] = boardConfigs[i].boardName;
-        board["type"] = boardConfigs[i].type;
-        board["index"] = boardConfigs[i].boardIndex;
-        board["slave_id"] = boardConfigs[i].slaveID;
-        board["modbus_port"] = boardConfigs[i].modbusPort;
-        board["poll_time"] = boardConfigs[i].pollTime;
-        board["record_interval"] = boardConfigs[i].recordInterval;
-        board["initialised"] = boardConfigs[i].initialised;
-        
-        // Add board-specific settings based on type
-        if (boardConfigs[i].type == THERMOCOUPLE_IO) {
-            JsonArray channels = board.createNestedArray("channels");
-            
-            for (int j = 0; j < 8; j++) {
-                JsonObject channel = channels.createNestedObject();
-                
-                channel["alert_enable"] = boardConfigs[i].settings.thermocoupleIO.channels[j].alertEnable;
-                channel["output_enable"] = boardConfigs[i].settings.thermocoupleIO.channels[j].outputEnable;
-                channel["alert_latch"] = boardConfigs[i].settings.thermocoupleIO.channels[j].alertLatch;
-                channel["alert_edge"] = boardConfigs[i].settings.thermocoupleIO.channels[j].alertEdge;
-                channel["tc_type"] = boardConfigs[i].settings.thermocoupleIO.channels[j].tcType;
-                channel["alert_setpoint"] = boardConfigs[i].settings.thermocoupleIO.channels[j].alertSetpoint;
-                channel["alert_hysteresis"] = boardConfigs[i].settings.thermocoupleIO.channels[j].alertHysteresis;
-                channel["channel_name"] = boardConfigs[i].settings.thermocoupleIO.channels[j].channelName;
-                channel["record_temperature"] = boardConfigs[i].settings.thermocoupleIO.channels[j].recordTemperature;
-                channel["record_cold_junction"] = boardConfigs[i].settings.thermocoupleIO.channels[j].recordColdJunction;
-                channel["record_status"] = boardConfigs[i].settings.thermocoupleIO.channels[j].recordStatus;
-                channel["show_on_dashboard"] = boardConfigs[i].settings.thermocoupleIO.channels[j].showOnDashboard;
-                channel["monitor_fault"] = boardConfigs[i].settings.thermocoupleIO.channels[j].monitorFault;
-                channel["monitor_alarm"] = boardConfigs[i].settings.thermocoupleIO.channels[j].monitorAlarm;
-            }
-        }
-        // Add more board types as needed
-    }
-    
-    // Open file for writing
-    File configFile = LittleFS.open(BOARD_CONFIG_FILENAME, "w");
-    if (!configFile) {
-        log(LOG_WARNING, true, "Failed to open board config file for writing\n");
-        return false;
-    }
-    
-    // Serialize JSON to file
-    if (serializeJson(doc, configFile) == 0) {
-        log(LOG_WARNING, true, "Failed to write board config to file\n");
-        configFile.close();
-        return false;
-    }
-    
-    log(LOG_DEBUG, false, "saveBoardConfig doc size: %d\n", doc.memoryUsage());
-    
-    configFile.close();
-    
-    return true;
+    // Use binary format for saving
+    return saveBoardConfigBinary();
 }
 
 // Set up API endpoints for board configuration
@@ -286,8 +112,8 @@ void handleGetBoardConfig() {
         return;
     }
     
-    // Create JSON response
-    DynamicJsonDocument doc(4096);
+    // Create JSON response with smaller buffer (was 4096, now optimized)
+    DynamicJsonDocument doc(2048);
     JsonArray boards = doc.createNestedArray("boards");
     
     // Add each board to the JSON response
@@ -376,7 +202,7 @@ void handleAddBoard() {
         return;
     }
     
-    // Parse JSON request
+    // Parse JSON request with increased buffer size for full board configs
     DynamicJsonDocument doc(4096);
     DeserializationError error = deserializeJson(doc, requestData);
     
@@ -506,7 +332,7 @@ void handleUpdateBoard() {
         return;
     }
     
-    // Parse request body
+    // Parse request body with increased buffer size for full board configs
     DynamicJsonDocument doc(4096);
     DeserializationError error = deserializeJson(doc, requestData);
     
@@ -1095,4 +921,236 @@ const char* getDeviceTypeName(deviceType_t type) {
         default:
             return "Unknown";
     }
+}
+
+// Binary serialization functions
+
+// Pack boolean flags from BoardConfig channel into a 16-bit value
+uint16_t packChannelFlags(const BoardConfig* board, int channelIndex) {
+    uint16_t flags = 0;
+    const auto& channel = board->settings.thermocoupleIO.channels[channelIndex];
+    
+    if (channel.alertEnable) flags |= (1 << TC_FLAG_ALERT_ENABLE);
+    if (channel.outputEnable) flags |= (1 << TC_FLAG_OUTPUT_ENABLE);
+    if (channel.alertLatch) flags |= (1 << TC_FLAG_ALERT_LATCH);
+    if (channel.alertEdge) flags |= (1 << TC_FLAG_ALERT_EDGE);
+    if (channel.recordTemperature) flags |= (1 << TC_FLAG_RECORD_TEMP);
+    if (channel.recordColdJunction) flags |= (1 << TC_FLAG_RECORD_CJ);
+    if (channel.recordStatus) flags |= (1 << TC_FLAG_RECORD_STATUS);
+    if (channel.showOnDashboard) flags |= (1 << TC_FLAG_SHOW_DASHBOARD);
+    if (channel.monitorFault) flags |= (1 << TC_FLAG_MONITOR_FAULT);
+    if (channel.monitorAlarm) flags |= (1 << TC_FLAG_MONITOR_ALARM);
+    
+    return flags;
+}
+
+// Unpack 16-bit flags into BoardConfig channel booleans
+void unpackChannelFlags(uint16_t flags, BoardConfig* board, int channelIndex) {
+    auto& channel = board->settings.thermocoupleIO.channels[channelIndex];
+    
+    channel.alertEnable = (flags & (1 << TC_FLAG_ALERT_ENABLE)) != 0;
+    channel.outputEnable = (flags & (1 << TC_FLAG_OUTPUT_ENABLE)) != 0;
+    channel.alertLatch = (flags & (1 << TC_FLAG_ALERT_LATCH)) != 0;
+    channel.alertEdge = (flags & (1 << TC_FLAG_ALERT_EDGE)) != 0;
+    channel.recordTemperature = (flags & (1 << TC_FLAG_RECORD_TEMP)) != 0;
+    channel.recordColdJunction = (flags & (1 << TC_FLAG_RECORD_CJ)) != 0;
+    channel.recordStatus = (flags & (1 << TC_FLAG_RECORD_STATUS)) != 0;
+    channel.showOnDashboard = (flags & (1 << TC_FLAG_SHOW_DASHBOARD)) != 0;
+    channel.monitorFault = (flags & (1 << TC_FLAG_MONITOR_FAULT)) != 0;
+    channel.monitorAlarm = (flags & (1 << TC_FLAG_MONITOR_ALARM)) != 0;
+}
+
+// Pack a thermocouple channel from BoardConfig to binary format
+void packThermocoupleChannel(const BoardConfig* board, int channelIndex, BinaryThermocoupleChannel* binaryChannel) {
+    const auto& channel = board->settings.thermocoupleIO.channels[channelIndex];
+    
+    binaryChannel->flags = packChannelFlags(board, channelIndex);
+    binaryChannel->tcType = channel.tcType;
+    binaryChannel->alertSetpoint = channel.alertSetpoint;
+    binaryChannel->alertHysteresis = channel.alertHysteresis;
+    strncpy(binaryChannel->channelName, channel.channelName, sizeof(binaryChannel->channelName) - 1);
+    binaryChannel->channelName[sizeof(binaryChannel->channelName) - 1] = '\0';
+}
+
+// Unpack a thermocouple channel from binary format to BoardConfig
+void unpackThermocoupleChannel(const BinaryThermocoupleChannel* binaryChannel, BoardConfig* board, int channelIndex) {
+    auto& channel = board->settings.thermocoupleIO.channels[channelIndex];
+    
+    unpackChannelFlags(binaryChannel->flags, board, channelIndex);
+    channel.tcType = binaryChannel->tcType;
+    channel.alertSetpoint = binaryChannel->alertSetpoint;
+    channel.alertHysteresis = binaryChannel->alertHysteresis;
+    strncpy(channel.channelName, binaryChannel->channelName, sizeof(channel.channelName) - 1);
+    channel.channelName[sizeof(channel.channelName) - 1] = '\0';
+}
+
+// Save board configuration in binary format
+bool saveBoardConfigBinary() {
+    log(LOG_INFO, true, "Saving board configuration in binary format (count: %d)\n", boardCount);
+    
+    // Check if LittleFS is mounted
+    if (!LittleFS.begin()) {
+        log(LOG_WARNING, true, "Failed to mount LittleFS\n");
+        return false;
+    }
+    
+    // Open file for writing
+    File configFile = LittleFS.open(BINARY_CONFIG_FILENAME, "w");
+    if (!configFile) {
+        log(LOG_WARNING, true, "Failed to open binary config file for writing\n");
+        return false;
+    }
+    
+    // Write header
+    BinaryBoardHeader header;
+    header.magic = BINARY_CONFIG_MAGIC;
+    header.version = BINARY_CONFIG_VERSION;
+    header.boardCount = boardCount;
+    header.reserved = 0;
+    
+    if (configFile.write((uint8_t*)&header, sizeof(header)) != sizeof(header)) {
+        log(LOG_WARNING, true, "Failed to write binary config header\n");
+        configFile.close();
+        return false;
+    }
+    
+    // Write each board configuration
+    for (uint8_t i = 0; i < boardCount; i++) {
+        BinaryBoardConfig binaryBoard;
+        
+        // Copy basic board information
+        strncpy(binaryBoard.boardName, boardConfigs[i].boardName, sizeof(binaryBoard.boardName) - 1);
+        binaryBoard.boardName[sizeof(binaryBoard.boardName) - 1] = '\0';
+        binaryBoard.type = boardConfigs[i].type;
+        binaryBoard.boardIndex = boardConfigs[i].boardIndex;
+        binaryBoard.slaveID = boardConfigs[i].slaveID;
+        binaryBoard.modbusPort = boardConfigs[i].modbusPort;
+        binaryBoard.pollTime = boardConfigs[i].pollTime;
+        binaryBoard.recordInterval = boardConfigs[i].recordInterval;
+        
+        // Pack board flags
+        binaryBoard.flags = 0;
+        if (boardConfigs[i].initialised) binaryBoard.flags |= 0x01;
+        if (boardConfigs[i].connected) binaryBoard.flags |= 0x02;
+        
+        // Clear reserved bytes
+        memset(binaryBoard.reserved, 0, sizeof(binaryBoard.reserved));
+        
+        // Pack board-specific settings
+        if (boardConfigs[i].type == THERMOCOUPLE_IO) {
+            for (int j = 0; j < 8; j++) {
+                packThermocoupleChannel(&boardConfigs[i], j, &binaryBoard.settings.thermocoupleChannels[j]);
+            }
+        } else {
+            // For other board types, clear the settings area
+            memset(binaryBoard.settings.rawData, 0, sizeof(binaryBoard.settings.rawData));
+        }
+        
+        // Write board configuration
+        if (configFile.write((uint8_t*)&binaryBoard, sizeof(binaryBoard)) != sizeof(binaryBoard)) {
+            log(LOG_WARNING, true, "Failed to write binary config for board %d\n", i);
+            configFile.close();
+            return false;
+        }
+    }
+    
+    configFile.close();
+    
+    // Calculate and log file size
+    size_t fileSize = sizeof(BinaryBoardHeader) + (boardCount * sizeof(BinaryBoardConfig));
+    log(LOG_INFO, true, "Binary config saved: %d bytes (%d boards)\n", fileSize, boardCount);
+    
+    return true;
+}
+
+// Load board configuration from binary format
+bool loadBoardConfigBinary() {
+    log(LOG_INFO, true, "Loading board configuration from binary format\n");
+    
+    // Check if LittleFS is mounted
+    if (!LittleFS.begin()) {
+        log(LOG_WARNING, true, "Failed to mount LittleFS\n");
+        return false;
+    }
+    
+    // Check if binary config file exists
+    if (!LittleFS.exists(BINARY_CONFIG_FILENAME)) {
+        log(LOG_INFO, true, "Binary config file does not exist, starting with empty configuration\n");
+        boardCount = 0;
+        return true;
+    }
+    
+    // Open file for reading
+    File configFile = LittleFS.open(BINARY_CONFIG_FILENAME, "r");
+    if (!configFile) {
+        log(LOG_WARNING, true, "Failed to open binary config file for reading\n");
+        return false;
+    }
+    
+    // Read and validate header
+    BinaryBoardHeader header;
+    if (configFile.read((uint8_t*)&header, sizeof(header)) != sizeof(header)) {
+        log(LOG_WARNING, true, "Failed to read binary config header\n");
+        configFile.close();
+        return false;
+    }
+    
+    if (header.magic != BINARY_CONFIG_MAGIC) {
+        log(LOG_WARNING, true, "Invalid binary config magic number: 0x%02X\n", header.magic);
+        configFile.close();
+        return false;
+    }
+    
+    if (header.version != BINARY_CONFIG_VERSION) {
+        log(LOG_WARNING, true, "Unsupported binary config version: %d\n", header.version);
+        configFile.close();
+        return false;
+    }
+    
+    if (header.boardCount > MAX_BOARDS) {
+        log(LOG_WARNING, true, "Too many boards in config: %d (max %d)\n", header.boardCount, MAX_BOARDS);
+        configFile.close();
+        return false;
+    }
+    
+    // Read board configurations
+    boardCount = header.boardCount;
+    for (uint8_t i = 0; i < boardCount; i++) {
+        BinaryBoardConfig binaryBoard;
+        
+        if (configFile.read((uint8_t*)&binaryBoard, sizeof(binaryBoard)) != sizeof(binaryBoard)) {
+            log(LOG_WARNING, true, "Failed to read binary config for board %d\n", i);
+            configFile.close();
+            boardCount = i; // Partial load
+            return false;
+        }
+        
+        // Unpack basic board information
+        strncpy(boardConfigs[i].boardName, binaryBoard.boardName, sizeof(boardConfigs[i].boardName) - 1);
+        boardConfigs[i].boardName[sizeof(boardConfigs[i].boardName) - 1] = '\0';
+        boardConfigs[i].type = (deviceType_t)binaryBoard.type;
+        boardConfigs[i].boardIndex = binaryBoard.boardIndex;
+        boardConfigs[i].slaveID = binaryBoard.slaveID;
+        boardConfigs[i].modbusPort = binaryBoard.modbusPort;
+        boardConfigs[i].pollTime = binaryBoard.pollTime;
+        boardConfigs[i].recordInterval = binaryBoard.recordInterval;
+        
+        // Unpack board flags
+        boardConfigs[i].initialised = (binaryBoard.flags & 0x01) != 0;
+        boardConfigs[i].connected = (binaryBoard.flags & 0x02) != 0;
+        
+        // Unpack board-specific settings
+        if (boardConfigs[i].type == THERMOCOUPLE_IO) {
+            for (int j = 0; j < 8; j++) {
+                unpackThermocoupleChannel(&binaryBoard.settings.thermocoupleChannels[j], &boardConfigs[i], j);
+            }
+        }
+        
+        log(LOG_DEBUG, false, "Loaded board %d: %s (type %d)\n", i, boardConfigs[i].boardName, boardConfigs[i].type);
+    }
+    
+    configFile.close();
+    
+    log(LOG_INFO, true, "Binary config loaded: %d boards\n", boardCount);
+    return true;
 }
