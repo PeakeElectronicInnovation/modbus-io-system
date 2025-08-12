@@ -1,4 +1,5 @@
 #include "statusManager.h"
+#include "../io_core/board_config.h"
 
 // Object definition
 Adafruit_NeoPixel leds(4, PIN_LED_DAT, NEO_GRB + NEO_KHZ800);
@@ -37,10 +38,12 @@ void manageStatus(void)
       status.LEDcolour[LED_SYSTEM_STATUS] = LED_STATUS_OK;
     }
     // Modbus status LED colours
-    if (status.modbusConnected) {
-      status.LEDcolour[LED_MODBUS_STATUS] = LED_STATUS_OK;
-    } else if (status.modbusBusy) {
+    if (status.modbusBusy) {
       status.LEDcolour[LED_MODBUS_STATUS] = LED_STATUS_BUSY;
+    } else if (hasOfflineBoards()) {
+      status.LEDcolour[LED_MODBUS_STATUS] = LED_STATUS_WARNING; // Amber for offline boards
+    } else if (status.modbusConnected) {
+      status.LEDcolour[LED_MODBUS_STATUS] = LED_STATUS_OK;
     } else {
       status.LEDcolour[LED_MODBUS_STATUS] = LED_STATUS_OFF;
     }
@@ -60,4 +63,16 @@ void manageStatus(void)
     leds.show();
   }
   statusLocked = false;
+}
+
+// Check if any initialised boards are offline
+bool hasOfflineBoards(void) {
+  for (uint8_t i = 0; i < boardCount; i++) {
+    BoardConfig* board = &boardConfigs[i];
+    // Only check boards that have been initialised (assigned Modbus address)
+    if (board->initialised && !board->connected) {
+      return true;
+    }
+  }
+  return false;
 }

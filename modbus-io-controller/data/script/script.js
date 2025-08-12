@@ -292,10 +292,21 @@ async function updateSystemStatus() {
             document.getElementById('rtcTime').textContent = data.rtc.time;
         }
               
-        // Update Modbus status
+        // Update Modbus status with enhanced logic
         const modbusStatus = document.getElementById('modbusStatus');
-        modbusStatus.textContent = data.modbus ? 'CONNECTED' : 'NOT-CONNECTED';
-        modbusStatus.className = 'status ' + (data.modbus ? 'connected' : 'not-connected');
+        if (data.modbus && data.modbus.busy) {
+            modbusStatus.textContent = 'BUSY';
+            modbusStatus.className = 'status warning';
+        } else if (data.modbus && data.modbus.hasOfflineBoards) {
+            modbusStatus.textContent = 'BOARDS OFFLINE';
+            modbusStatus.className = 'status warning';
+        } else if (data.modbus && data.modbus.connected) {
+            modbusStatus.textContent = 'CONNECTED';
+            modbusStatus.className = 'status connected';
+        } else {
+            modbusStatus.textContent = 'NOT-CONNECTED';
+            modbusStatus.className = 'status not-connected';
+        }
         
         // Update SD card status
         if (data.sd) {
@@ -315,14 +326,10 @@ async function updateSystemStatus() {
                 // Show SD card details
                 document.getElementById('sdCapacityContainer').style.display = 'flex';
                 document.getElementById('sdFreeSpaceContainer').style.display = 'flex';
-                document.getElementById('sdLogSizeContainer').style.display = 'flex';
-                document.getElementById('sdSensorSizeContainer').style.display = 'flex';
                 
                 // Update SD card details
                 document.getElementById('sdCapacity').textContent = data.sd.capacityGB.toFixed(2) + ' GB';
                 document.getElementById('sdFreeSpace').textContent = data.sd.freeSpaceGB.toFixed(2) + ' GB';
-                document.getElementById('sdLogSize').textContent = data.sd.logFileSizeKB.toFixed(2) + ' kB';
-                document.getElementById('sdSensorSize').textContent = data.sd.sensorFileSizeKB.toFixed(2) + ' kB';
             }
         }
     } catch (error) {
@@ -334,8 +341,6 @@ async function updateSystemStatus() {
 function hideSDDetails() {
     document.getElementById('sdCapacityContainer').style.display = 'none';
     document.getElementById('sdFreeSpaceContainer').style.display = 'none';
-    document.getElementById('sdLogSizeContainer').style.display = 'none';
-    document.getElementById('sdSensorSizeContainer').style.display = 'none';
 }
 
 // Update system status when the system tab is active
@@ -2355,14 +2360,17 @@ async function loadBoardStatusList() {
         
         // Check if we have boards
         if (boards && boards.length > 0) {
-            // Add options for each board
+            // Add options for each board (including disconnected ones)
             boards.forEach(board => {
-                if (board.connected) {
-                    const option = document.createElement('option');
-                    option.value = board.id;
-                    option.textContent = `${board.name} (${board.type})`;
-                    boardSelector.appendChild(option);
+                const option = document.createElement('option');
+                option.value = board.id;
+                const statusText = board.connected ? '' : ' - DISCONNECTED';
+                option.textContent = `${board.name} (${board.type})${statusText}`;
+                if (!board.connected) {
+                    option.style.color = '#ff6b6b'; // Red color for disconnected boards
+                    option.style.fontWeight = 'bold';
                 }
+                boardSelector.appendChild(option);
             });
             
             // Hide no boards message
@@ -2405,10 +2413,21 @@ async function loadBoardStatus(boardId) {
         // Update board information with better null/undefined checking
         document.getElementById('boardInfoName').textContent = board.name || 'Not specified';
         document.getElementById('boardInfoType').textContent = board.type || 'Unknown type';        
-        document.getElementById('boardInfoConnectionStatus').textContent = board.connected ? 'Connected' : 'Disconnected';
+        
+        // Update connection status with color coding
+        const connectionStatusElement = document.getElementById('boardInfoConnectionStatus');
+        connectionStatusElement.textContent = board.connected ? 'Connected' : 'Disconnected';
+        connectionStatusElement.className = board.connected ? 'status-connected' : 'status-disconnected';
+        
         document.getElementById('boardInfoSlaveId').textContent = board.slave_id || 'N/A';
         document.getElementById('boardInfoModbusPort').textContent = board.modbus_port !== undefined ? `Port ${board.modbus_port + 1}` : 'N/A';
         document.getElementById('boardInfoPollTime').textContent = board.poll_time ? `${board.poll_time} ms` : 'N/A';
+        
+        // Grey out board info if disconnected
+        const boardInfoContainer = document.getElementById('boardInfo');
+        if (boardInfoContainer) {
+            boardInfoContainer.className = board.connected ? 'board-info-connected' : 'board-info-disconnected';
+        }
 
         // Update connection and initialisation status
         connectStatusGlobal[boardId] = board.connected;
@@ -2436,17 +2455,32 @@ async function loadBoardStatus(boardId) {
             }
             
             // Update PSU voltage
-            document.getElementById('psuVoltage').textContent = 
-                (board.thermocouple.psu_voltage !== undefined) 
-                ? `${board.thermocouple.psu_voltage.toFixed(2)}V` 
-                : 'N/A';
+            const psuVoltageElement = document.getElementById('psuVoltage');
+            if (psuVoltageElement) {
+                const voltageText = (board.thermocouple.psu_voltage !== undefined) 
+                    ? `${board.thermocouple.psu_voltage.toFixed(2)}V` 
+                    : 'N/A';
+                psuVoltageElement.textContent = !board.connected ? `${voltageText} (STALE)` : voltageText;
+            }
+            
+            // Apply offline styling to thermocouple overview panel
+            const thermocoupleOverview = document.getElementById('thermocoupleOverview');
+            if (thermocoupleOverview) {
+                if (!board.connected) {
+                    thermocoupleOverview.classList.add('board-offline');
+                    thermocoupleOverview.title = 'Board is offline - data may be stale';
+                } else {
+                    thermocoupleOverview.classList.remove('board-offline');
+                    thermocoupleOverview.title = '';
+                }
+            }
             
             // Check if channels exist before updating
             if (board.thermocouple.channels && Array.isArray(board.thermocouple.channels)) {
-                updateThermocoupleChannels(board.thermocouple.channels);
+                updateThermocoupleChannels(board.thermocouple.channels, board.connected);
                 
-                // Update temperature history with current data
-                updateClientTemperatureHistory(board.thermocouple.channels);
+                // Update temperature history with current data (pass connection status)
+                updateClientTemperatureHistory(board.thermocouple.channels, board.connected);
                 
                 // Update chart with accumulated temperature data
                 updateTemperatureChart(clientTemperatureHistory);
@@ -2483,7 +2517,7 @@ function updateErrorIndicator(elementId, hasError) {
 }
 
 // Update the thermocouple channel cards
-function updateThermocoupleChannels(channels) {
+function updateThermocoupleChannels(channels, isConnected = true) {
     const channelCardsContainer = document.getElementById('channelCards');
     channelCardsContainer.innerHTML = '';
     
@@ -2538,6 +2572,12 @@ function updateThermocoupleChannels(channels) {
         const card = document.createElement('div');
         card.className = 'channel-card';
         
+        // Apply offline styling if board is disconnected
+        if (!isConnected) {
+            card.classList.add('board-offline');
+            card.title = 'Board is offline - data may be stale';
+        }
+        
         // Determine temperature display class based on status
         let tempClass = '';
         if (channel.status && channel.status.alarm_state) {
@@ -2554,7 +2594,13 @@ function updateThermocoupleChannels(channels) {
                 tempDisplay = 'Open Circuit';
             } else {
                 tempDisplay = channel.temperature.toFixed(1) + '°C';
+                // Add offline indicator if board is disconnected
+                if (!isConnected) {
+                    tempDisplay += ' (OFFLINE)';
+                }
             }
+        } else if (!isConnected) {
+            tempDisplay = 'N/A (OFFLINE)';
         }
         
         // Lookup TC type text (tc_type 0-7 maps to K, J, T, etc.)
@@ -2609,7 +2655,7 @@ function updateThermocoupleChannels(channels) {
                 </div>
                 <div class="detail-item">
                     <span class="info-label">Cold Junction:</span>
-                    <span class="info-value">${formatValue(channel.cold_junction)}°C</span>
+                    <span class="info-value">${formatValue(channel.cold_junction)}°C${!isConnected ? ' (STALE)' : ''}</span>
                 </div>
             </div>
             <div class="channel-status-indicators">
@@ -2768,7 +2814,7 @@ function initBoardStatusPage() {
 }
 
 // Update client-side temperature history
-function updateClientTemperatureHistory(channels) {
+function updateClientTemperatureHistory(channels, isConnected = true) {
     // Add current timestamp (seconds since start)
     const currentTime = new Date().getTime() / 1000;
         
@@ -2797,15 +2843,16 @@ function updateClientTemperatureHistory(channels) {
         // Find channel with this number
         const channel = channels.find(ch => ch && ch.number === i);
         
-        // Add the temperature data (or null if not available)
+        // Add the temperature data (or null if not available or board offline)
         let tempValue = null;
-        if (channel && typeof channel.temperature === 'number') {
+        if (isConnected && channel && typeof channel.temperature === 'number') {
             if (channel.status && (channel.status.open_circuit || channel.status.short_circuit)) {
                 tempValue = null; // Use null for open/short circuit
             } else {
                 tempValue = channel.temperature;
+            }
         }
-        }
+        // If board is offline, tempValue remains null to create gaps in chart
         
         // Add the data point
         clientTemperatureHistory.channels[i].data.push(tempValue);
@@ -3228,8 +3275,8 @@ async function refreshDashboardData() {
                     continue;
                 }
                 
-                // Update dashboard with channel data
-                updateDashboardThermocoupleItems(boardId, board.thermocouple.channels);
+                // Update dashboard with channel data and connection status
+                updateDashboardThermocoupleItems(boardId, board.thermocouple.channels, board.connected);
             }
             // Add more board types as needed
         }
@@ -3239,7 +3286,7 @@ async function refreshDashboardData() {
 }
 
 // Update thermocouple items on the dashboard
-function updateDashboardThermocoupleItems(boardId, channels) {
+function updateDashboardThermocoupleItems(boardId, channels, isConnected = true) {
     const items = dashboardItems.filter(item => item.board_index == boardId);
     
     // Update each item
@@ -3253,10 +3300,24 @@ function updateDashboardThermocoupleItems(boardId, channels) {
         const dashboardItem = document.getElementById(`dashboard-item-${boardId}-${channelIndex}`);
         if (!dashboardItem) return;
         
+        // Apply offline styling if board is disconnected
+        if (!isConnected) {
+            dashboardItem.classList.add('board-offline');
+            dashboardItem.title = 'Board is offline - data may be stale';
+        } else {
+            dashboardItem.classList.remove('board-offline');
+            dashboardItem.title = '';
+        }
+        
         // Update temperature
         const temperatureElement = dashboardItem.querySelector('.temperature');
         if (temperatureElement) {
-            if (channel.status && (channel.status.open_circuit || channel.status.short_circuit)) {
+            if (!isConnected) {
+                // Show stale data with offline indicator
+                const staleTemp = channel.temperature !== undefined ? `${channel.temperature.toFixed(1)} °C` : '&ndash;.&ndash; °C';
+                temperatureElement.innerHTML = `${staleTemp} <span class="offline-indicator">(OFFLINE)</span>`;
+                temperatureElement.style.color = '#999'; // Grey color for offline
+            } else if (channel.status && (channel.status.open_circuit || channel.status.short_circuit)) {
                 temperatureElement.innerHTML = 'Fault';
                 temperatureElement.style.color = 'orange'; // Amber color for faults
             } else {
@@ -3274,7 +3335,14 @@ function updateDashboardThermocoupleItems(boardId, channels) {
         // Update cold junction
         const coldJunctionElement = dashboardItem.querySelector('.cold-junction');
         if (coldJunctionElement) {
-            coldJunctionElement.innerHTML = channel.cold_junction !== undefined ? `CJ: ${channel.cold_junction.toFixed(1)} °C` : 'CJ: &ndash;.&ndash; °C';
+            const cjTemp = channel.cold_junction !== undefined ? `CJ: ${channel.cold_junction.toFixed(1)} °C` : 'CJ: &ndash;.&ndash; °C';
+            if (!isConnected) {
+                coldJunctionElement.innerHTML = `${cjTemp} <span class="offline-indicator">(STALE)</span>`;
+                coldJunctionElement.style.color = '#999';
+            } else {
+                coldJunctionElement.innerHTML = cjTemp;
+                coldJunctionElement.style.color = '';
+            }
         }
         
         // Update output status based on status.output_state (from Board Status API)
@@ -3284,13 +3352,22 @@ function updateDashboardThermocoupleItems(boardId, channels) {
             if (channel.status && channel.status.output_state !== undefined) {
                 const isOutputOn = channel.status.output_state === true || channel.status.output_state === 1;
                 
-                if (isOutputOn) {
+                if (!isConnected) {
+                    // Show stale output status
+                    const outputText = isOutputOn ? 'Output: ON' : 'Output: OFF';
+                    const indicatorClass = isOutputOn ? 'output-on' : 'output-off';
+                    outputStatusElement.innerHTML = `<span class="output-indicator ${indicatorClass}"></span> ${outputText} <span class="offline-indicator">(STALE)</span>`;
+                    outputStatusElement.style.color = '#999';
+                } else if (isOutputOn) {
                     outputStatusElement.innerHTML = '<span class="output-indicator output-on"></span> Output: ON';
+                    outputStatusElement.style.color = '';
                 } else {
                     outputStatusElement.innerHTML = '<span class="output-indicator output-off"></span> Output: OFF';
+                    outputStatusElement.style.color = '';
                 }
             } else {
                 outputStatusElement.innerHTML = '<span class="output-indicator"></span> Output: &ndash;';
+                outputStatusElement.style.color = !isConnected ? '#999' : '';
             }
         }
         
@@ -3302,6 +3379,13 @@ function updateDashboardThermocoupleItems(boardId, channels) {
             // Check if status object exists and contains alarm_state
             if (channel.status && channel.status.alarm_state) {
                 alertStatusElement.classList.add('alert-active');
+                if (!isConnected) {
+                    alertStatusElement.classList.add('stale-data');
+                }
+            }
+            
+            if (!isConnected) {
+                alertStatusElement.classList.add('board-offline');
             }
         }
     });

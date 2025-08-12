@@ -35,10 +35,10 @@
 #define STATUS_BUSY 4
 
 // LED status colors
-#define LED_STATUS_STARTUP LED_COLOR_ORANGE
+#define LED_STATUS_STARTUP LED_COLOR_YELLOW
 #define LED_STATUS_OK LED_COLOR_GREEN
 #define LED_STATUS_ERROR LED_COLOR_RED
-#define LED_STATUS_WARNING LED_COLOR_YELLOW
+#define LED_STATUS_WARNING LED_COLOR_ORANGE
 #define LED_STATUS_BUSY LED_COLOR_BLUE
 #define LED_STATUS_OFF LED_COLOR_OFF
 
@@ -47,6 +47,7 @@
 
 void init_statusManager(void);
 void manageStatus(void);
+bool hasOfflineBoards(void);
 
 struct StatusVariables
 {

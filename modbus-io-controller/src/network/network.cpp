@@ -413,8 +413,11 @@ void setupWebServer()
         sdLocked = false;
       }
       
-      // Network connections
-      doc["modbus"] = status.modbusConnected;
+      // Enhanced Modbus status
+      JsonObject modbus = doc.createNestedObject("modbus");
+      modbus["connected"] = status.modbusConnected;
+      modbus["busy"] = status.modbusBusy;
+      modbus["hasOfflineBoards"] = hasOfflineBoards();
       
       statusLocked = false;
       
