@@ -120,6 +120,7 @@
                                 <h2>Configured Boards</h2>
                                 <div class="board-controls">
                                     <button id="addBoardBtn" class="btn btn-primary"><i class="fas fa-plus"></i>Add Board</button>
+                                    <button id="duplicateBoardBtn" class="btn btn-primary"><i class="fas fa-copy"></i>Duplicate Board</button>
                                     <button id="exportConfigBtn" class="btn btn-secondary"><i class="fas fa-download"></i> Export Config</button>
                                     <button id="importConfigBtn" class="btn btn-secondary"><i class="fas fa-upload"></i> Import Config</button>
                                 </div>
@@ -133,7 +134,7 @@
                         <!-- Board configuration form (hidden by default) -->
                         <div id="boardConfigForm" class="board-config-form" style="display: none;">
                             <div class="boards-header">
-                                <h2 id="formTitle">Add New Expansion Board</h2>
+                                <h2 id="formTitle" class="board-config-anchor">Add New Expansion Board</h2>
                                 <div class="form-actions">
                                     <button id="cancelBoardConfig" class="btn btn-secondary"><i class="fas fa-cancel"></i> Cancel</button>
                                     <button id="saveBoardConfig" class="btn btn-primary"><i class="fas fa-save"></i> Save Board Configuration</button>
@@ -297,6 +298,33 @@
                                     </div>
                                 </div>
                             </div>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- Duplicate Board Selection Modal -->
+                <div id="duplicateBoardModal" class="modal" style="display: none;">
+                    <div class="modal-content">
+                        <div class="modal-header">
+                            <h3>Select Board to Duplicate</h3>
+                            <span class="close" id="closeDuplicateModal">&times;</span>
+                        </div>
+                        <div class="modal-body">
+                            <p>Choose an existing board configuration to duplicate:</p>
+                            <div class="form-group">
+                                <label for="boardToDuplicate">Select Board:</label>
+                                <select id="boardToDuplicate" class="form-control">
+                                    <!-- Options will be populated dynamically -->
+                                </select>
+                            </div>
+                            <div class="form-group">
+                                <label for="duplicatedBoardName">New Board Name:</label>
+                                <input type="text" id="duplicatedBoardName" class="form-control" placeholder="Enter name for duplicated board">
+                            </div>
+                        </div>
+                        <div class="modal-footer">
+                            <button id="cancelDuplicate" class="btn btn-secondary">Cancel</button>
+                            <button id="confirmDuplicate" class="btn btn-primary">Duplicate Board</button>
                         </div>
                     </div>
                 </div>

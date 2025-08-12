@@ -1550,6 +1550,18 @@ function showBoardConfigForm(editIndex = null) {
     
     if (boardConfigForm) {
         boardConfigForm.style.display = 'block';
+        
+        // Scroll to the board configuration form for better UX
+        setTimeout(() => {
+            const formTitle = document.getElementById('formTitle');
+            if (formTitle) {
+                formTitle.scrollIntoView({ 
+                    behavior: 'smooth', 
+                    block: 'start',
+                    inline: 'nearest'
+                });
+            }
+        }, 100); // Small delay to ensure form is fully rendered
     }
 }
 
@@ -1563,6 +1575,188 @@ function hideBoardConfigForm() {
     
     // Reset form state
     editingBoardIndex = null;
+}
+
+// Show duplicate board selection modal
+function showDuplicateBoardModal() {
+    const duplicateBoardModal = document.getElementById('duplicateBoardModal');
+    const boardToDuplicate = document.getElementById('boardToDuplicate');
+    const duplicatedBoardName = document.getElementById('duplicatedBoardName');
+    
+    // Check if there are any boards to duplicate
+    if (!boardConfigurations || boardConfigurations.length === 0) {
+        showToast('warning', 'No Boards Available', 'No boards are configured to duplicate.');
+        return;
+    }
+    
+    // Check if we've reached the maximum number of boards
+    if (boardConfigurations.length >= 8) {
+        showToast('warning', 'Board Limit Reached', 'Maximum number of boards (8) already configured.');
+        return;
+    }
+    
+    // Populate the board selection dropdown
+    boardToDuplicate.innerHTML = '';
+    boardConfigurations.forEach((board, index) => {
+        const option = document.createElement('option');
+        option.value = index;
+        option.textContent = `${board.name || `Board ${index + 1}`} (${getBoardTypeString(board.type)})`;
+        boardToDuplicate.appendChild(option);
+    });
+    
+    // Clear the new board name field
+    duplicatedBoardName.value = '';
+    
+    // Show the modal
+    duplicateBoardModal.style.display = 'block';
+}
+
+// Duplicate the selected board
+function duplicateSelectedBoard() {
+    const boardToDuplicate = document.getElementById('boardToDuplicate');
+    const duplicatedBoardName = document.getElementById('duplicatedBoardName');
+    const duplicateBoardModal = document.getElementById('duplicateBoardModal');
+    
+    const sourceIndex = parseInt(boardToDuplicate.value);
+    const newBoardName = duplicatedBoardName.value.trim();
+    
+    // Validate inputs
+    if (isNaN(sourceIndex) || sourceIndex < 0 || sourceIndex >= boardConfigurations.length) {
+        showToast('error', 'Invalid Selection', 'Please select a valid board to duplicate.');
+        return;
+    }
+    
+    if (!newBoardName) {
+        showToast('error', 'Name Required', 'Please enter a name for the duplicated board.');
+        return;
+    }
+    
+    // Check if name already exists
+    const nameExists = boardConfigurations.some(board => board.name === newBoardName);
+    if (nameExists) {
+        showToast('error', 'Name Already Exists', 'A board with this name already exists. Please choose a different name.');
+        return;
+    }
+    
+    // Create a deep copy of the source board
+    const sourceBoard = boardConfigurations[sourceIndex];
+    const duplicatedBoard = JSON.parse(JSON.stringify(sourceBoard));
+    
+    // Update the duplicated board's name and keep the same modbus port
+    duplicatedBoard.name = newBoardName;
+    // Keep the same Modbus Port as the source board since multiple boards can share the same RS485 bus
+    
+    console.log('Duplicating board:', sourceBoard.name, 'with port:', sourceBoard.modbus_port);
+    console.log('New board:', newBoardName, 'keeping same port:', duplicatedBoard.modbus_port);
+    
+    // Hide the modal
+    duplicateBoardModal.style.display = 'none';
+    
+    // Show the board configuration form with the duplicated data
+    showBoardConfigFormWithData(duplicatedBoard);
+    
+    showToast('success', 'Board Duplicated', `Board configuration copied successfully. Please review and save the new board.`);
+}
+
+// Note: getNextAvailableModbusPort() function removed since Modbus Port represents
+// the RS485 bus (0 or 1) and multiple boards can share the same bus.
+// When duplicating boards, we keep the same Modbus Port as the source board.
+
+// Get board type string for display
+function getBoardTypeString(type) {
+    switch (type) {
+        case 0: return 'Controller IO';
+        case 1: return 'Analogue/Digital IO';
+        case 2: return 'Thermocouple IO';
+        case 3: return 'RTD IO';
+        case 4: return 'Energy Meter';
+        default: return 'Unknown';
+    }
+}
+
+// Show board configuration form with pre-filled data
+function showBoardConfigFormWithData(boardData) {
+    const boardConfigForm = document.getElementById('boardConfigForm');
+    const formTitle = document.getElementById('formTitle');
+    
+    // Set form to add mode (not editing existing board)
+    editingBoardIndex = null;
+    
+    if (formTitle) {
+        formTitle.textContent = 'Add New Expansion Board (Duplicated)';
+    }
+    
+    // Fill form with duplicated board data
+    const typeSelectElement = document.getElementById('boardType');
+    // Convert numeric type to string type for the dropdown
+    switch (boardData.type) {
+        case 0:
+            typeSelectElement.value = 'CONTROLLER_IO';
+            break;
+        case 1:
+            typeSelectElement.value = 'ANALOGUE_DIGITAL_IO';
+            break;
+        case 2:
+            typeSelectElement.value = 'THERMOCOUPLE_IO';
+            break;
+        case 3:
+            typeSelectElement.value = 'RTD_IO';
+            break;
+        case 4:
+            typeSelectElement.value = 'ENERGY_METER';
+            break;
+        default:
+            typeSelectElement.value = 'THERMOCOUPLE_IO';
+    }
+    
+    document.getElementById('boardName').value = boardData.name || '';
+    console.log('Setting modbus port field to:', boardData.modbus_port, 'type:', typeof boardData.modbus_port);
+    document.getElementById('modbusPort').value = boardData.modbus_port;
+    document.getElementById('pollTime').value = boardData.poll_time / 1000;
+    document.getElementById('recordInterval').value = boardData.record_interval / 1000;
+    
+    // Show board type specific settings
+    showBoardTypeSettings(typeSelectElement.value);
+    
+    // Fill board type specific settings
+    if (boardData.type === 2) { // THERMOCOUPLE_IO
+        // Fill channel settings
+        if (boardData.channels && Array.isArray(boardData.channels)) {
+            boardData.channels.forEach((channel, index) => {
+                document.getElementById(`alertEnable_${index}`).checked = channel.alert_enable;
+                document.getElementById(`outputEnable_${index}`).checked = channel.output_enable;
+                document.getElementById(`alertLatch_${index}`).checked = channel.alert_latch;
+                document.getElementById(`alertEdge_${index}`).checked = channel.alert_edge;
+                document.getElementById(`tcType_${index}`).value = channel.tc_type;
+                document.getElementById(`alertSetpoint_${index}`).value = channel.alert_setpoint;
+                document.getElementById(`alertHysteresis_${index}`).value = channel.alert_hysteresis;
+                document.getElementById(`channelName_${index}`).value = channel.channel_name;
+                document.getElementById(`recordTemperature_${index}`).checked = channel.record_temperature;
+                document.getElementById(`recordColdJunction_${index}`).checked = channel.record_cold_junction;
+                document.getElementById(`recordStatus_${index}`).checked = channel.record_status;
+                document.getElementById(`showOnDashboard_${index}`).checked = channel.show_on_dashboard;
+                document.getElementById(`monitorFault_${index}`).checked = channel.monitor_fault;
+                document.getElementById(`monitorAlarm_${index}`).checked = channel.monitor_alarm;
+            });
+        }
+    }
+    // Add more board types as needed
+    
+    if (boardConfigForm) {
+        boardConfigForm.style.display = 'block';
+        
+        // Scroll to the board configuration form for better UX
+        setTimeout(() => {
+            const formTitle = document.getElementById('formTitle');
+            if (formTitle) {
+                formTitle.scrollIntoView({ 
+                    behavior: 'smooth', 
+                    block: 'start',
+                    inline: 'nearest'
+                });
+            }
+        }, 100);
+    }
 }
 
 // Show settings specific to the selected board type
@@ -1749,6 +1943,14 @@ document.addEventListener('DOMContentLoaded', () => {
         });
     }
     
+    // Duplicate board button click handler
+    const duplicateBoardBtn = document.getElementById('duplicateBoardBtn');
+    if (duplicateBoardBtn) {
+        duplicateBoardBtn.addEventListener('click', () => {
+            showDuplicateBoardModal();
+        });
+    }
+    
     // File input change handler for config import
     const configFileInput = document.getElementById('configFileInput');
     if (configFileInput) {
@@ -1800,6 +2002,39 @@ document.addEventListener('DOMContentLoaded', () => {
                 // Reset the file input
                 document.getElementById('configFileInput').value = '';
                 window.selectedConfigFile = null;
+            }
+        });
+    }
+    
+    // Duplicate board modal handlers
+    const duplicateBoardModal = document.getElementById('duplicateBoardModal');
+    const cancelDuplicate = document.getElementById('cancelDuplicate');
+    const confirmDuplicate = document.getElementById('confirmDuplicate');
+    const closeDuplicateModal = document.getElementById('closeDuplicateModal');
+
+    if (cancelDuplicate) {
+        cancelDuplicate.addEventListener('click', () => {
+            duplicateBoardModal.style.display = 'none';
+        });
+    }
+
+    if (confirmDuplicate) {
+        confirmDuplicate.addEventListener('click', () => {
+            duplicateSelectedBoard();
+        });
+    }
+
+    if (closeDuplicateModal) {
+        closeDuplicateModal.addEventListener('click', () => {
+            duplicateBoardModal.style.display = 'none';
+        });
+    }
+
+    // Close the duplicate modal when clicking outside it
+    if (duplicateBoardModal) {
+        window.addEventListener('click', (event) => {
+            if (event.target === duplicateBoardModal) {
+                duplicateBoardModal.style.display = 'none';
             }
         });
     }
