@@ -1964,12 +1964,14 @@ document.addEventListener('DOMContentLoaded', () => {
         });
     }
 
-    // Import confirmation modal handlers
+    // Enhanced import confirmation modal handlers
     const importConfirmModal = document.getElementById('importConfirmModal');
     const cancelImport = document.getElementById('cancelImport');
-    const confirmImport = document.getElementById('confirmImport');
+    const importOverwrite = document.getElementById('importOverwrite');
+    const importOnline = document.getElementById('importOnline');
     const closeImportModal = importConfirmModal?.querySelector('.close');
 
+    // Cancel import handler
     if (cancelImport) {
         cancelImport.addEventListener('click', () => {
             importConfirmModal.style.display = 'none';
@@ -1979,17 +1981,31 @@ document.addEventListener('DOMContentLoaded', () => {
         });
     }
 
-    if (confirmImport) {
-        confirmImport.addEventListener('click', () => {
+    // Import and Overwrite handler (original behavior)
+    if (importOverwrite) {
+        importOverwrite.addEventListener('click', () => {
             importConfirmModal.style.display = 'none';
-            // Proceed with import using the stored file
+            // Proceed with import using the stored file (boards will be uninitialized)
             if (window.selectedConfigFile) {
-                performImport(window.selectedConfigFile);
+                performImport(window.selectedConfigFile, 'overwrite');
                 window.selectedConfigFile = null;
             }
         });
     }
 
+    // Import and Online handler (new behavior - set boards as initialized)
+    if (importOnline) {
+        importOnline.addEventListener('click', () => {
+            importConfirmModal.style.display = 'none';
+            // Proceed with import and set boards as initialized
+            if (window.selectedConfigFile) {
+                performImport(window.selectedConfigFile, 'online');
+                window.selectedConfigFile = null;
+            }
+        });
+    }
+
+    // Close modal handler
     if (closeImportModal) {
         closeImportModal.addEventListener('click', () => {
             importConfirmModal.style.display = 'none';
@@ -3625,13 +3641,17 @@ function importBoardConfiguration(file) {
 }
 
 // Function to actually perform the import after confirmation
-function performImport(file) {
-    // Show loading toast
-    const loadingToast = showToast('info', 'Importing...', 'Uploading and validating configuration file', 10000);
+function performImport(file, importMode = 'overwrite') {
+    // Show loading toast with appropriate message
+    const loadingMessage = importMode === 'online' 
+        ? 'Importing configuration and bringing boards online...' 
+        : 'Uploading and validating configuration file...';
+    const loadingToast = showToast('info', 'Importing...', loadingMessage, 10000);
     
     const xhr = new XMLHttpRequest();
     const formData = new FormData();
     formData.append('file', file);
+    // Note: import_mode is now sent as URL parameter instead of form data
     
     xhr.onload = function() {
         // Remove loading toast
@@ -3641,7 +3661,12 @@ function performImport(file) {
         
         if (xhr.status === 200) {
             console.log('Import successful:', xhr.responseText);
-            showToast('success', 'Success', 'Board configuration imported successfully');
+            
+            // Show appropriate success message based on import mode
+            const successMessage = importMode === 'online' 
+                ? 'Board configuration imported and boards are now online!' 
+                : 'Board configuration imported successfully';
+            showToast('success', 'Success', successMessage);
             
             // Refresh the board configurations list after a short delay to allow
             // the server to fully process the configuration
@@ -3664,8 +3689,8 @@ function performImport(file) {
         showToast('error', 'Import Failed', 'Network error during file upload');
     };
     
-    // Open and send the request
-    xhr.open('POST', '/api/boards/import', true);
+    // Open and send the request with import mode as URL parameter
+    xhr.open('POST', '/api/boards/import?import_mode=' + encodeURIComponent(importMode), true);
     xhr.send(formData);
     
     // Reset the file input

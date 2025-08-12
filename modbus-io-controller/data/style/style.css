@@ -2170,3 +2170,52 @@ padding-top: 25px; /* Add extra padding to accommodate corner badge */
 .btn-danger:hover {
     background-color: #c82333;
 }
+
+/* Import Modal Specific Styles */
+.import-options {
+    margin: 20px 0;
+}
+
+.import-option {
+    background-color: #f8f9fa;
+    border: 1px solid #dee2e6;
+    border-radius: 6px;
+    padding: 15px;
+    margin-bottom: 15px;
+}
+
+.import-option:last-child {
+    margin-bottom: 0;
+}
+
+.import-option strong {
+    color: #495057;
+    display: block;
+    margin-bottom: 8px;
+}
+
+.import-option p {
+    margin: 0;
+    color: #6c757d;
+    font-size: 0.9em;
+    line-height: 1.4;
+}
+
+/* Enhanced button styles for import modal */
+.btn-success {
+    background-color: #28a745;
+    color: white;
+}
+
+.btn-success:hover {
+    background-color: #218838;
+}
+
+.btn-warning {
+    background-color: #ffc107;
+    color: #212529;
+}
+
+.btn-warning:hover {
+    background-color: #e0a800;
+}

@@ -71,20 +71,31 @@
                 </div>
             </div>
 
-            <!-- Import confirmation modal -->
+            <!-- Enhanced Import Configuration Modal -->
             <div id="importConfirmModal" class="modal" style="display: none;">
                 <div class="modal-content">
                     <div class="modal-header">
-                        <h2>Confirm Import</h2>
-                        <span class="close">&times;</span>
+                        <h3>Import Board Configuration</h3>
+                        <span class="close" id="closeImportModal">&times;</span>
                     </div>
                     <div class="modal-body">
-                        <p>Importing a configuration will <strong>overwrite</strong> all current board configurations.</p>
-                        <p>This action cannot be undone. Are you sure you want to proceed?</p>
+                        <p><strong>Warning:</strong> Importing a configuration will replace all current board settings.</p>
+                        <p>Choose how you want to handle the imported boards:</p>
+                        <div class="import-options">
+                            <div class="import-option">
+                                <strong>Import and Overwrite:</strong>
+                                <p>Import boards as new/unconfigured. You will need to manually initialize each board after import.</p>
+                            </div>
+                            <div class="import-option">
+                                <strong>Import and Online:</strong>
+                                <p>Import boards and automatically set them as initialized. Boards will immediately start communicating if connected.</p>
+                            </div>
+                        </div>
                     </div>
                     <div class="modal-footer">
                         <button id="cancelImport" class="btn btn-secondary">Cancel</button>
-                        <button id="confirmImport" class="btn btn-danger">Import and Overwrite</button>
+                        <button id="importOverwrite" class="btn btn-warning">Import and Overwrite</button>
+                        <button id="importOnline" class="btn btn-success">Import and Online</button>
                     </div>
                 </div>
             </div>
@@ -569,6 +580,10 @@
             </a>
         </div>
     </div>
+
+    <!-- Hidden file input for config import -->
+    <input type="file" id="configFileInput" accept=".json" style="display: none;">
+
     <script src="script/script.js"></script>
 </body>
 </html>

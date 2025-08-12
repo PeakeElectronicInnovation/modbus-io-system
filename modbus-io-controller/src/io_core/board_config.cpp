@@ -644,11 +644,15 @@ void handleExportConfig() {
 void handleImportConfig() {
     static File configFile;
     static bool uploadSuccess = false;
+    static String importMode = "overwrite"; // Default to overwrite mode
     
     HTTPUpload& upload = server.upload();
     
     if (upload.status == UPLOAD_FILE_START) {
         log(LOG_INFO, true, "Upload started: %s\n", upload.filename.c_str());
+        
+        // Reset import mode to default (will be set properly in UPLOAD_FILE_END)
+        importMode = "overwrite";
         
         // Check if LittleFS is mounted
         if (!LittleFS.begin()) {
@@ -676,6 +680,15 @@ void handleImportConfig() {
         }
     } else if (upload.status == UPLOAD_FILE_END) {
         log(LOG_INFO, true, "Upload complete: %d bytes\n", upload.totalSize);
+        
+        // Extract import mode from URL parameters (sent as query parameter)
+        if (server.hasArg("import_mode")) {
+            importMode = server.arg("import_mode");
+            log(LOG_INFO, true, "Import mode: %s\n", importMode.c_str());
+        } else {
+            importMode = "overwrite"; // Default mode
+            log(LOG_INFO, true, "Import mode not specified, using default: overwrite\n");
+        }
         
         // Close the file
         if (configFile) {
@@ -746,8 +759,16 @@ void handleImportConfig() {
                     newBoard.modbusPort = board["modbus_port"] | 0;
                     newBoard.pollTime = board["poll_time"] | 15000;
                     newBoard.recordInterval = board["record_interval"] | 15000;
-                    newBoard.initialised = false; // Reset for new environment
-                    newBoard.connected = false;   // Reset for new environment
+                    
+                    // Set initialised flag based on import mode
+                    if (importMode == "online") {
+                        newBoard.initialised = true;  // Set as initialised for online mode
+                        log(LOG_INFO, true, "Board %s set as initialised (online mode)\n", newBoard.boardName);
+                    } else {
+                        newBoard.initialised = false; // Reset for new environment (overwrite mode)
+                        log(LOG_INFO, true, "Board %s set as not initialised (overwrite mode)\n", newBoard.boardName);
+                    }
+                    newBoard.connected = false;   // Reset connection status for new environment
                     
                     // Import board-specific settings
                     if (newBoard.type == THERMOCOUPLE_IO && board.containsKey("channels")) {
@@ -814,17 +835,28 @@ void handleImportConfig() {
                 return;
             }
             
-            // Reset initialised flag for all boards since we need to re-initialise them
-            // in the new environment
+            // Set initialised flag based on import mode
             for (uint8_t i = 0; i < boardCount; i++) {
-                boardConfigs[i].initialised = false;
-                boardConfigs[i].connected = false;
+                if (importMode == "online") {
+                    boardConfigs[i].initialised = true;  // Keep boards as initialised for online mode
+                    log(LOG_INFO, true, "Board %d (%s) set as initialised (online mode)\n", i, boardConfigs[i].boardName);
+                } else {
+                    boardConfigs[i].initialised = false; // Reset for overwrite mode
+                    log(LOG_INFO, true, "Board %d (%s) set as not initialised (overwrite mode)\n", i, boardConfigs[i].boardName);
+                }
+                boardConfigs[i].connected = false; // Reset connection status for new environment
             }
             
-            // Save the configuration with the reset initialised flags
+            // Save the configuration with the updated initialised flags
             saveBoardConfig();
             
-            log(LOG_INFO, true, "Board configuration imported successfully\n");
+            // If import mode is "online", apply board configurations to start communications
+            if (importMode == "online") {
+                log(LOG_INFO, true, "Applying board configurations for online mode\n");
+                apply_board_configs(); // This function sets up the boards for communication
+            }
+            
+            log(LOG_INFO, true, "Board configuration imported successfully (mode: %s)\n", importMode.c_str());
         } else {
             log(LOG_WARNING, true, "Upload failed - not validating config\n");
         }
