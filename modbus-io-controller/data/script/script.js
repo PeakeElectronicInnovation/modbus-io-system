@@ -210,9 +210,12 @@ async function loadNetworkSettings() {
             document.getElementById('gateway').value = data.gateway || '';
             document.getElementById('dns').value = data.dns || '';
 
-            // Set NTP server
+            // Set NTP server and hostname
             document.getElementById('hostName').value = data.hostname || '';
             document.getElementById('ntpServer').value = data.ntp || '';
+            
+            // Set Modbus TCP port
+            document.getElementById('modbusTcpPort').value = data.modbusTcpPort || 502;
         }
     } catch (error) {
         console.error('Error loading network settings:', error);
@@ -327,6 +330,54 @@ async function updateSystemStatus() {
         } else {
             modbusStatus.textContent = 'NOT-CONNECTED';
             modbusStatus.className = 'status not-connected';
+        }
+        
+        // Update Modbus TCP status
+        if (data.modbusTcp) {
+            console.log('Full modbusTcp data:', data.modbusTcp);
+            const modbusTcpStatus = document.getElementById('modbusTcpStatus');
+            const modbusTcpPortElement = document.getElementById('modbusTcpPortStatus');
+            const modbusTcpClients = document.getElementById('modbusTcpClients');
+            const modbusTcpClientDetails = document.getElementById('modbusTcpClientDetails');
+            const modbusTcpClientList = document.getElementById('modbusTcpClientList');
+            
+            // Update status in Communications panel
+            if (modbusTcpStatus) {
+                if (data.modbusTcp.enabled) {
+                    modbusTcpStatus.textContent = 'ENABLED';
+                    modbusTcpStatus.className = 'status ok';
+                } else {
+                    modbusTcpStatus.textContent = 'DISABLED';
+                    modbusTcpStatus.className = 'status warning';
+                }
+            }
+            
+            // Update port in Communications panel
+            if (modbusTcpPortElement) {
+                modbusTcpPortElement.textContent = data.modbusTcp.port || 502;
+            }
+            
+            // Update client count in Modbus TCP Clients panel
+            if (modbusTcpClients) {
+                modbusTcpClients.textContent = data.modbusTcp.connectedClients || 0;
+            }
+            
+            // Update client details in Modbus TCP Clients panel
+            if (modbusTcpClientDetails && modbusTcpClientList) {
+                if (data.modbusTcp.clients && data.modbusTcp.clients.length > 0) {
+                    modbusTcpClientDetails.style.display = 'block';
+                    modbusTcpClientList.innerHTML = '';
+                    
+                    data.modbusTcp.clients.forEach(clientInfo => {
+                        const clientDiv = document.createElement('div');
+                        clientDiv.className = 'client-item';
+                        clientDiv.textContent = clientInfo;
+                        modbusTcpClientList.appendChild(clientDiv);
+                    });
+                } else {
+                    modbusTcpClientDetails.style.display = 'none';
+                }
+            }
         }
         
         // Update SD card status
@@ -445,7 +496,8 @@ document.getElementById('networkForm').addEventListener('submit', async function
         dns: document.getElementById('dns').value,
         hostname: document.getElementById('hostName').value,
         ntp: document.getElementById('ntpServer').value,
-        dst: document.getElementById('enableDST').checked
+        dst: document.getElementById('enableDST').checked,
+        modbusTcpPort: parseInt(document.getElementById('modbusTcpPort').value)
     };
 
     // Show loading toast

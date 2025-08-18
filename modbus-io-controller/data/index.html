@@ -474,6 +474,10 @@
                                 <label for="ntpServer">NTP Server:</label>
                                 <input type="text" id="ntpServer" value="pool.ntp.org">
                             </div>
+                            <div class="form-group">
+                                <label for="modbusTcpPort">Modbus TCP Port:</label>
+                                <input type="number" id="modbusTcpPort" value="502" min="1" max="65535">
+                            </div>
                             <button type="submit" id="saveNetworkSettings" class="btn">Save Network Settings</button>
                             <div id="networkStatus" class="status-message"></div>
                         </form>
@@ -538,8 +542,32 @@
                             <h3>Communications</h3>
                             <div class="status-values">
                                 <div class="status-item">
-                                    <span class="label">Modbus Status:</span>
+                                    <span class="label">Modbus RTU:</span>
                                     <span class="status" id="modbusStatus">--</span>
+                                </div>
+                                <div class="status-item">
+                                    <span class="label">Modbus TCP:</span>
+                                    <span class="status" id="modbusTcpStatus">--</span>
+                                </div>
+                                <div class="status-item">
+                                    <span class="label">TCP Port:</span>
+                                    <span class="value" id="modbusTcpPortStatus">--</span>
+                                </div>
+                            </div>
+                        </div>
+                        
+                        <div class="status-card">
+                            <h3>Modbus TCP Clients</h3>
+                            <div class="status-values">
+                                <div class="status-item">
+                                    <span class="label">Connected Clients:</span>
+                                    <span class="value" id="modbusTcpClients">--</span>
+                                </div>
+                            </div>
+                            <div class="client-details" id="modbusTcpClientDetails" style="display: none;">
+                                <h4>Active Connections</h4>
+                                <div id="modbusTcpClientList" class="client-list">
+                                    <!-- Client details will be populated here -->
                                 </div>
                             </div>
                         </div>

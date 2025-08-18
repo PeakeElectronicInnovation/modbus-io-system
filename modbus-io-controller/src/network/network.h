@@ -22,6 +22,11 @@
 void init_network(void);
 void manageNetwork(void);
 
+// Modbus TCP functions
+void init_modbus_tcp(void);
+void manage_modbus_tcp(void);
+void setupModbusTCPAPI(void);
+
 // Network module header
 void setupEthernet(void);
 bool loadNetworkConfig(void);
@@ -63,6 +68,7 @@ struct NetworkConfig
     bool ntpEnabled;
     char timezone[8]; // Format: "+13:00"
     bool dstEnabled;  // Daylight Saving Time enabled
+    uint16_t modbusTcpPort; // Modbus TCP port
 };
 
 void printNetConfig(NetworkConfig config);

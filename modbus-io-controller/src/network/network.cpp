@@ -1,4 +1,5 @@
 #include "network.h"
+#include "modbus_tcp.h"
 
 // Global variables
 NetworkConfig networkConfig;
@@ -24,6 +25,10 @@ void init_network() {
     // Make sure all API endpoints are set up BEFORE starting the web server
     setupNetworkAPI();
     setupTimeAPI();
+    setupModbusTCPAPI();
+    
+    // Initialize Modbus TCP server
+    init_modbus_tcp();
     
     // Import: DO NOT call server.begin() here
     // It will be called after all API endpoints are registered
@@ -32,6 +37,7 @@ void init_network() {
 void manageNetwork(void) {
     manageEthernet();
     if (networkConfig.ntpEnabled) handleNTPUpdates(false);
+    manage_modbus_tcp();
 }
 
 void setupEthernet()
@@ -51,6 +57,7 @@ void setupEthernet()
     strcpy(networkConfig.hostname, "sensor-io");
     strcpy(networkConfig.ntpServer, "pool.ntp.org");
     networkConfig.dstEnabled = false;
+    networkConfig.modbusTcpPort = 502;
     saveNetworkConfig();
   }
 
@@ -162,6 +169,9 @@ bool loadNetworkConfig()
   // Parse booleans
   networkConfig.ntpEnabled = doc["ntp_enabled"] | false;
   networkConfig.dstEnabled = doc["dst_enabled"] | false;
+  
+  // Parse Modbus TCP port
+  networkConfig.modbusTcpPort = doc["modbus_tcp_port"] | 502;
 
   LittleFS.end();
   //debugPrintNetConfig(networkConfig);
@@ -202,6 +212,9 @@ void saveNetworkConfig()
   // Store booleans
   doc["ntp_enabled"] = networkConfig.ntpEnabled;
   doc["dst_enabled"] = networkConfig.dstEnabled;
+  
+  // Store Modbus TCP port
+  doc["modbus_tcp_port"] = networkConfig.modbusTcpPort;
     
   // Open file for writing
   File configFile = LittleFS.open(CONFIG_FILENAME, "w");
@@ -277,6 +290,7 @@ void setupNetworkAPI()
         doc["hostname"] = networkConfig.hostname;
         doc["ntp"] = networkConfig.ntpServer;
         doc["dst"] = networkConfig.dstEnabled;
+        doc["modbusTcpPort"] = networkConfig.modbusTcpPort;
         
         String response;
         serializeJson(doc, response);
@@ -336,6 +350,14 @@ void setupNetworkAPI()
               // Update DST setting if provided
               if (doc.containsKey("dst")) {
                 networkConfig.dstEnabled = doc["dst"];
+              }
+
+              // Update Modbus TCP port if provided
+              if (doc.containsKey("modbusTcpPort")) {
+                uint16_t port = doc["modbusTcpPort"];
+                if (port >= 1 && port <= 65535) {
+                  networkConfig.modbusTcpPort = port;
+                }
               }
 
               // Save configuration to storage
@@ -418,6 +440,21 @@ void setupWebServer()
       modbus["connected"] = status.modbusConnected;
       modbus["busy"] = status.modbusBusy;
       modbus["hasOfflineBoards"] = hasOfflineBoards();
+      
+      // Modbus TCP status
+      JsonObject modbusTcp = doc.createNestedObject("modbusTcp");
+      modbusTcp["enabled"] = modbusTCPConfig.enabled;
+      modbusTcp["port"] = modbusTCPConfig.port > 0 ? modbusTCPConfig.port : MODBUS_TCP_DEFAULT_PORT;
+      modbusTcp["connectedClients"] = modbusServer.getConnectedClientCount();
+      
+      // Detailed client information
+      JsonArray clients = modbusTcp.createNestedArray("clients");
+      for (int i = 0; i < MAX_MODBUS_CLIENTS; i++) {
+        String clientInfo = modbusServer.getClientInfo(i);
+        if (clientInfo.length() > 0) {
+          clients.add(clientInfo);
+        }
+      }
       
       statusLocked = false;
       
