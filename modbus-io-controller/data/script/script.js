@@ -220,9 +220,30 @@ async function loadNetworkSettings() {
 }
 
 
+// Load version information
+async function loadVersionInfo() {
+    try {
+        const response = await fetch('/api/system/version');
+        const versionData = await response.json();
+        const versionElement = document.getElementById('versionInfo');
+        if (versionElement && versionData.version_string) {
+            versionElement.textContent = versionData.version_string;
+        }
+    } catch (error) {
+        console.error('Error loading version info:', error);
+        const versionElement = document.getElementById('versionInfo');
+        if (versionElement) {
+            versionElement.textContent = 'Modbus TCP IO System';
+        }
+    }
+}
+
 // Event listeners
 document.addEventListener('DOMContentLoaded', () => {
     console.log('DOM loaded - initialising board configuration system');
+    
+    // Load version information
+    loadVersionInfo();
     
     // Load board configurations on page load
     loadBoardConfigurations();    
