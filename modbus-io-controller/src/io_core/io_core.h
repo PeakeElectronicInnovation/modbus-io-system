@@ -28,6 +28,7 @@ void setSlaveIDInUse(uint8_t slaveID, uint8_t modbusPort);
 void apply_board_configs(void);
 bool apply_thermocouple_config(BoardConfig* config);
 uint8_t findFreeDeviceIndex(void);
+void updateModbusAddressTracking(void);
 
 // Board specific handlers
 // Analogue digital IO board management functions ------------>

@@ -1370,7 +1370,7 @@ function renderSingleBoard(board, index, container) {
     boardItem.innerHTML = `
         <div class="board-info">
         <span class="board-type">${board.name || 'Unnamed Board'}</span>
-        <span class="board-details">Type: ${boardTypeName}, Port: ${board.modbus_port + 1}</span>
+        <span class="board-details">Type: ${boardTypeName}, Port: ${board.modbus_port + 1}, Slave ID: ${board.slave_id}</span>
         <div class="board-status-container">
             <span class="board-init-status ${initStatusClass}" id="init-status-${index}">Status: ${initStatus}</span>
             <span class="board-connect-status ${connectStatusClass}" id="connect-status-${index}">Connection: ${connectStatus}</span>

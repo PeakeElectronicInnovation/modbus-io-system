@@ -80,6 +80,33 @@ void apply_board_configs() {
     }
 
     log(LOG_INFO, false, "Applied %d board configurations\n", appliedBoards);
+    
+    // Update modbus address tracking after applying configurations
+    updateModbusAddressTracking();
+}
+
+// Update the idAssigned arrays to reflect currently configured boards
+void updateModbusAddressTracking() {
+    // Clear all address assignments
+    memset(modbusConfig[0].idAssigned, false, sizeof(modbusConfig[0].idAssigned));
+    memset(modbusConfig[1].idAssigned, false, sizeof(modbusConfig[1].idAssigned));
+    
+    uint8_t count = getBoardCount();
+    for (uint8_t i = 0; i < count; i++) {
+        BoardConfig* board = getBoard(i);
+        if (!board || !board->initialised) continue;
+        
+        // Mark the slave ID as assigned on the appropriate bus
+        if (board->modbusPort == 0 && board->slaveID > 0 && board->slaveID < 243) {
+            modbusConfig[0].idAssigned[board->slaveID] = true;
+            log(LOG_INFO, false, "Marked slave ID %d as assigned on bus 1 for board '%s'\n", 
+                board->slaveID, board->boardName);
+        } else if (board->modbusPort == 1 && board->slaveID > 0 && board->slaveID < 243) {
+            modbusConfig[1].idAssigned[board->slaveID] = true;
+            log(LOG_INFO, false, "Marked slave ID %d as assigned on bus 2 for board '%s'\n", 
+                board->slaveID, board->boardName);
+        }
+    }
 }
 
 // Apply thermocouple IO board configuration
@@ -206,7 +233,9 @@ void manage_thermocouple(uint8_t index) {
     if (!thermocoupleIO_index.tcIO[index].configInitialised) {
         if (!setup_thermocouple(index)) {
             log(LOG_ERROR, true, "Failed to setup thermocouple board configuration registers at index %d\n", index);
-            getBoard(index)->initialised = false;
+            // Don't mark board as not initialized - it may just be temporarily offline
+            // Only mark as not initialized if this is a brand new board during initial setup
+            log(LOG_WARNING, true, "Board at index %d may be offline - keeping initialization status\n", index);
             return;
         }
         thermocoupleIO_index.tcIO[index].configInitialised = true;
