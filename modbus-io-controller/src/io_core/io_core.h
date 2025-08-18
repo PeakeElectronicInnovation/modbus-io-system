@@ -22,6 +22,7 @@ extern thermocoupleIO_index_t thermocoupleIO_index;
 void init_io_core(void);
 void manage_io_core(void);
 uint8_t assign_address(modbusConfig_t *busCfg);
+void setSlaveIDInUse(uint8_t slaveID, uint8_t modbusPort);
 
 // Board configuration application functions
 void apply_board_configs(void);

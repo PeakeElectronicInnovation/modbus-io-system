@@ -185,6 +185,18 @@ uint8_t assign_address(modbusConfig_t *busCfg) {
     return 0; // No free addresses available
 }
 
+void setSlaveIDInUse(uint8_t slaveID, uint8_t modbusPort) {
+    if (modbusPort >= 2) {
+        log(LOG_ERROR, true, "Invalid Modbus port %d\n", modbusPort);
+        return;
+    }
+    if (slaveID < 1 || slaveID > 247) {
+        log(LOG_ERROR, true, "Invalid slave ID %d\n", slaveID);
+        return;
+    }
+    modbusConfig[modbusPort].idAssigned[slaveID] = true;
+}
+
 // Analogue digital IO board management functions -------------------------->
 void manage_analogue_digital_io(uint8_t index) {
 }

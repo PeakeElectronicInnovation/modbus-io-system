@@ -1,6 +1,25 @@
 #pragma once
 
-#define VERSION "1.0.0"
+// Version information - use PlatformIO build flags if available, otherwise fallback
+#ifndef VERSION_MAJOR
+    #define VERSION_MAJOR 1
+#endif
+
+#ifndef VERSION_MINOR
+    #define VERSION_MINOR 0
+#endif
+
+#ifndef VERSION_PATCH
+    #define VERSION_PATCH 0
+#endif
+
+// Helper macros for proper string handling
+#define STRINGIFY(x) #x
+#define TOSTRING(x) STRINGIFY(x)
+
+// Create version strings using macro stringification - this avoids the PROJECT_VERSION issue
+#define VERSION TOSTRING(VERSION_MAJOR) "." TOSTRING(VERSION_MINOR) "." TOSTRING(VERSION_PATCH)
+#define VERSION_STRING "Modbus TCP IO System V" VERSION
 
 // Include libraries
 #include <Arduino.h>

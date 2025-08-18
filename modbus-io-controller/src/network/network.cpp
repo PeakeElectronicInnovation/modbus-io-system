@@ -430,21 +430,31 @@ void setupWebServer()
     }
   });
 
+  // System version endpoint
+  server.on("/api/system/version", HTTP_GET, []() {
+    StaticJsonDocument<128> doc;
+    doc["version"] = VERSION;
+    doc["version_string"] = VERSION_STRING;
+    doc["major"] = VERSION_MAJOR;
+    doc["minor"] = VERSION_MINOR;
+    doc["patch"] = VERSION_PATCH;
+    
+    String response;
+    serializeJson(doc, response);
+    server.send(200, "application/json", response);
+  });
+
   // System reboot endpoint
   server.on("/api/system/reboot", HTTP_POST, []() {
     // Send response first before rebooting
     server.send(200, "application/json", "{\"success\":true,\"message\":\"System is rebooting...\"}");
     
-    // Add a small delay to ensure response is sent
-    delay(500);
+    // Small delay to ensure response is sent
+    delay(100);
     
-    // Log the reboot
-    log(LOG_INFO, true, "System reboot requested via web interface\n");
-
-    delay(1000);
-    
-    // Perform system reboot
-    rp2040.reboot();
+    // Trigger system reboot
+    log(LOG_INFO, true, "System reboot requested via API\n");
+    rp2040.restart();
   });
 
   // Handle static files

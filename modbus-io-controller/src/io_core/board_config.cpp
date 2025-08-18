@@ -763,7 +763,10 @@ void handleImportConfig() {
                     // Set initialised flag based on import mode
                     if (importMode == "online") {
                         newBoard.initialised = true;  // Set as initialised for online mode
-                        log(LOG_INFO, true, "Board %s set as initialised (online mode)\n", newBoard.boardName);
+                        // Set the slave ID as in-use
+                        setSlaveIDInUse(newBoard.slaveID, newBoard.modbusPort);
+
+                        log(LOG_INFO, true, "Board %s set as initialised (online mode), slave ID %d\n", newBoard.boardName, newBoard.slaveID);
                     } else {
                         newBoard.initialised = false; // Reset for new environment (overwrite mode)
                         log(LOG_INFO, true, "Board %s set as not initialised (overwrite mode)\n", newBoard.boardName);
