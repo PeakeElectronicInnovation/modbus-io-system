@@ -970,7 +970,6 @@ function downloadFile(path) {
 function viewFile(path) {
     // Construct the URL for viewing the file
     const viewUrl = `/api/sd/view?path=${encodeURIComponent(path)}`;
-    
     // Open file in a new tab
     window.open(viewUrl, '_blank');
 }
@@ -980,6 +979,14 @@ let boardConfigurations = [];
 let editingBoardIndex = null;
 let connectStatusGlobal = [];
 let initStatusGlobal = [];
+
+// Helper function to get current editing board ID
+function getCurrentEditingBoardId() {
+    if (editingBoardIndex !== null && boardConfigurations[editingBoardIndex]) {
+        return boardConfigurations[editingBoardIndex].id;
+    }
+    return null;
+}
 
 // Function to convert board type string to enum value
 function getBoardTypeValue(boardType) {
@@ -1241,6 +1248,18 @@ async function saveBoardConfiguration() {
     // Validate board name length (max 13 chars for NULL termination)
     if (boardName.length > 13) {
         showToast('error', 'Validation Error', 'Board name must be 13 characters or less');
+        return;
+    }
+    
+    // Check for unique board name
+    const currentBoardId = getCurrentEditingBoardId();
+    const existingBoard = boardConfigurations.find(board => 
+        board.name.toLowerCase() === boardName.toLowerCase() && 
+        board.id !== currentBoardId
+    );
+    
+    if (existingBoard) {
+        showToast('error', 'Validation Error', `Board name "${boardName}" is already in use. Please choose a unique name.`);
         return;
     }
     
