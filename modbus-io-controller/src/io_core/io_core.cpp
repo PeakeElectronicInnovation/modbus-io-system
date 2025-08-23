@@ -3,6 +3,7 @@
 #include "board_config.h"
 #include "board_status.h"
 #include "dashboard_config.h"
+#include "../storage/sdManager.h"
 
 
 // Object definitions
@@ -499,6 +500,9 @@ bool record_thermocouple(uint8_t index) {
     if (!thermocoupleIO_index.tcIO[index].configInitialised) return false;
     if (index >= boardCount) return false;
     if (!sdInfo.ready) return false;
+    
+    // Pause recording if board is offline
+    if (!getBoard(index)->connected) return false;
 
     // Check for a change in settings since last record
     bool changed = false;
@@ -522,8 +526,14 @@ bool record_thermocouple(uint8_t index) {
     char dataString[500] = {0};
 
     bool record = false;
+    
+    // Check if file exists - if not, we need to write headers
+    char fileNameBuf[100];
+    snprintf(fileNameBuf, sizeof(fileNameBuf), "/sensors/%s.csv", fileName);
+    bool fileExists = sd.exists(fileNameBuf);
+    bool writeHeaders = changed || !fileExists;
 
-    if (changed) { // Build new header string
+    if (writeHeaders) { // Build new header string
         char buf[25];
         for (int i = 0; i < 8; i++) {
             if (thermocoupleIO_index.tcIO[index].recordTemperature[i]) {
@@ -546,7 +556,9 @@ bool record_thermocouple(uint8_t index) {
             strcat(dataString, "\n");
             writeSensorData(dataString, fileName, true);
         }
-    } else {
+    }
+    
+    if (!writeHeaders) { // Write sensor data (not headers)
         char buf[10];
         for (int i = 0; i < 8; i++) {
             if (thermocoupleIO_index.tcIO[index].recordTemperature[i]) {
