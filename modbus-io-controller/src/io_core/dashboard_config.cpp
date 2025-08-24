@@ -65,8 +65,10 @@ bool loadDashboardConfig() {
         return false;
     }
     
-    // Get item count
+    // Get item count and chart configuration
     dashboardConfig.itemCount = doc["item_count"] | 0;
+    dashboardConfig.chartVisible = doc["chart_visible"] | false;
+    dashboardConfig.chartItemCount = doc["chart_item_count"] | 0;
     
     // Parse dashboard items
     JsonArray items = doc["items"];
@@ -82,6 +84,7 @@ bool loadDashboardConfig() {
         dashboardConfig.items[index].boardIndex = item["board_index"] | 0;
         dashboardConfig.items[index].channelIndex = item["channel_index"] | 0;
         dashboardConfig.items[index].displayOrder = item["display_order"] | index;
+        dashboardConfig.items[index].showInChart = item["show_in_chart"] | false;
         
         index++;
     }
@@ -103,9 +106,11 @@ bool saveDashboardConfig() {
     // Create JSON document
     DynamicJsonDocument doc(4096); // Increased buffer for 80 dashboard items
     
-    // Add magic number and item count
+    // Add magic number, item count, and chart configuration
     doc["magic_number"] = DASHBOARD_CONFIG_MAGIC_NUMBER;
     doc["item_count"] = dashboardConfig.itemCount;
+    doc["chart_visible"] = dashboardConfig.chartVisible;
+    doc["chart_item_count"] = dashboardConfig.chartItemCount;
     
     // Create items array
     JsonArray items = doc.createNestedArray("items");
@@ -117,6 +122,7 @@ bool saveDashboardConfig() {
         item["board_index"] = dashboardConfig.items[i].boardIndex;
         item["channel_index"] = dashboardConfig.items[i].channelIndex;
         item["display_order"] = dashboardConfig.items[i].displayOrder;
+        item["show_in_chart"] = dashboardConfig.items[i].showInChart;
     }
     
     // Open file for writing
@@ -190,11 +196,12 @@ void handleGetDashboardItems() {
             BoardConfig* board = getBoard(boardIndex);
             
             item["board_index"] = boardIndex;
-            item["board_name"] = board->boardName;
             item["channel_index"] = channelIndex;
-            item["display_order"] = dashboardConfig.items[i].displayOrder;
-            item["board_type"] = board->type;
+            item["board_name"] = board->boardName;
             item["channel_name"] = board->settings.thermocoupleIO.channels[channelIndex].channelName;
+            item["display_order"] = dashboardConfig.items[i].displayOrder;
+            item["show_in_chart"] = dashboardConfig.items[i].showInChart;
+            item["board_type"] = board->type;
         } else {
             // This item is no longer valid, mark for update
             needsUpdate = true;
@@ -249,6 +256,9 @@ void handleGetDashboardItems() {
         saveDashboardConfig();
     }
     
+    // Add chart visibility to response
+    doc["chart_visible"] = dashboardConfig.chartVisible;
+    
     // Serialize response
     String response;
     serializeJson(doc, response);
@@ -278,10 +288,15 @@ void handleSaveDashboardOrder() {
         
         JsonArray items = doc["items"];
         
+        // Extract chart configuration
+        bool chartVisible = doc["chart_visible"] | false;
+        JsonArray chartItems = doc["chart_items"];
+        
         // Temporary arrays to hold the new order
         uint8_t boardIndices[MAX_DASHBOARD_ITEMS];
         uint8_t channelIndices[MAX_DASHBOARD_ITEMS];
         uint8_t displayOrders[MAX_DASHBOARD_ITEMS];
+        bool showInChart[MAX_DASHBOARD_ITEMS];
         uint8_t count = 0;
         
         // Process each item
@@ -293,16 +308,30 @@ void handleSaveDashboardOrder() {
             uint8_t channelIndex = item["channel_index"] | 0;
             uint8_t displayOrder = item["display_order"] | count;
             
+            // Check if this item should be in chart
+            bool inChart = false;
+            for (JsonObject chartItem : chartItems) {
+                if ((chartItem["board_index"] | 255) == boardIndex && 
+                    (chartItem["channel_index"] | 255) == channelIndex) {
+                    inChart = true;
+                    break;
+                }
+            }
+            
             // Store in temporary arrays
             boardIndices[count] = boardIndex;
             channelIndices[count] = channelIndex;
             displayOrders[count] = displayOrder;
+            showInChart[count] = inChart;
             
             count++;
         }
         
-        // Update dashboard order
-        if (updateDashboardOrder(boardIndices, channelIndices, displayOrders, count)) {
+        // Update chart visibility
+        dashboardConfig.chartVisible = chartVisible;
+        
+        // Update dashboard order with chart settings
+        if (updateDashboardOrderWithChart(boardIndices, channelIndices, displayOrders, showInChart, count)) {
             server.send(200, "application/json", "{\"status\":\"success\"}");
         } else {
             server.send(500, "application/json", "{\"status\":\"error\",\"message\":\"Failed to update dashboard order\"}");
@@ -381,8 +410,41 @@ bool updateDashboardOrder(uint8_t *boardIndices, uint8_t *channelIndices, uint8_
         dashboardConfig.items[i].boardIndex = boardIndices[i];
         dashboardConfig.items[i].channelIndex = channelIndices[i];
         dashboardConfig.items[i].displayOrder = displayOrders[i];
+        dashboardConfig.items[i].showInChart = false; // Default to not in chart
         dashboardConfig.itemCount++;
     }
+    
+    // Save config
+    return saveDashboardConfig();
+}
+
+// Update dashboard order with chart settings
+bool updateDashboardOrderWithChart(uint8_t *boardIndices, uint8_t *channelIndices, uint8_t *displayOrders, bool *showInChart, uint8_t count) {
+    // Reset dashboard config
+    dashboardConfig.itemCount = 0;
+    memset(dashboardConfig.items, 0, sizeof(dashboardConfig.items));
+    
+    // Count chart items
+    uint8_t chartCount = 0;
+    
+    // Add items in new order
+    for (uint8_t i = 0; i < count; i++) {
+        if (i >= MAX_DASHBOARD_ITEMS) break;
+        
+        dashboardConfig.items[i].boardIndex = boardIndices[i];
+        dashboardConfig.items[i].channelIndex = channelIndices[i];
+        dashboardConfig.items[i].displayOrder = displayOrders[i];
+        dashboardConfig.items[i].showInChart = showInChart[i];
+        
+        if (showInChart[i]) {
+            chartCount++;
+        }
+        
+        dashboardConfig.itemCount++;
+    }
+    
+    // Update chart item count
+    dashboardConfig.chartItemCount = chartCount;
     
     // Save config
     return saveDashboardConfig();

@@ -3230,6 +3230,16 @@ document.addEventListener('DOMContentLoaded', function() {
 let dashboardItems = [];
 let dashboardEditMode = false;
 let dashboardRefreshInterval = null;
+let dashboardChart = null;
+let dashboardChartVisible = false;
+let dashboardTemperatureHistory = {
+    timestamps: [],
+    channels: []
+};
+let dashboardChartTimeframe = 1800; // Default 30 minutes
+let dashboardUpdateInterval = 2000; // Default 2 seconds
+const MAX_DASHBOARD_POINTS = 100000; // Maximum data points
+const MIN_UPDATE_INTERVAL = 2000; // Minimum 2 seconds
 
 // Initialize dashboard
 function initDashboard() {
@@ -3267,12 +3277,34 @@ async function loadDashboardItems() {
         // Sort items by display order
         dashboardItems.sort((a, b) => a.display_order - b.display_order);
         
-        // Render dashboard items
+        // Load dashboard chart configuration
+        dashboardChartVisible = data.chart_visible || false;
+        
+        // Re-render dashboard items to show/hide edit controls
         renderDashboardItems();
+        
+        // Show/hide chart section based on configuration
+        const chartSection = document.getElementById('dashboardChartSection');
+        if (chartSection) {
+            chartSection.style.display = dashboardChartVisible ? 'block' : 'none';
+        }
+        
+        // Add chart visibility toggle button in edit mode
+        if (dashboardEditMode) {
+            addChartVisibilityToggle();
+        }
+        
+        // Initialize chart if visible
+        if (dashboardChartVisible && !dashboardChart) {
+            initDashboardChart();
+        }
+        
+        // Calculate and start refresh interval based on chart requirements
+        calculateDashboardUpdateInterval();
         
         // Start refresh interval if not already running
         if (!dashboardRefreshInterval) {
-            dashboardRefreshInterval = setInterval(refreshDashboardData, 2000);
+            dashboardRefreshInterval = setInterval(refreshDashboardData, dashboardUpdateInterval);
         }
         
     } catch (error) {
@@ -3345,6 +3377,25 @@ function renderDashboardItems() {
         dashboardItem.appendChild(outputStatus);
         dashboardItem.appendChild(alertStatus);
         
+        // Add visual indicator if item is in chart
+        const isInChart = item.show_in_chart || false;
+        if (isInChart) {
+            dashboardItem.classList.add('in-chart');
+        }
+        
+        // Add chart toggle button in edit mode (after other elements)
+        if (dashboardEditMode) {
+            const chartToggle = document.createElement('div');
+            chartToggle.className = 'chart-toggle';
+            chartToggle.innerHTML = `
+                <button class="btn btn-sm ${isInChart ? 'btn-success' : 'btn-secondary'}" 
+                        onclick="toggleDashboardItemChart(${item.board_index}, ${item.channel_index})">
+                    <i class="fas fa-chart-line"></i> ${isInChart ? 'In Chart' : 'Add to Chart'}
+                </button>
+            `;
+            dashboardItem.appendChild(chartToggle);
+        }
+        
         // Add item to container
         container.appendChild(dashboardItem);
     });
@@ -3385,6 +3436,11 @@ async function refreshDashboardData() {
                 
                 // Update dashboard with channel data and connection status
                 updateDashboardThermocoupleItems(boardId, board.thermocouple.channels, board.connected);
+                
+                // Update dashboard chart temperature history if chart is visible
+                if (dashboardChartVisible) {
+                    updateDashboardTemperatureHistory();
+                }
             }
             // Add more board types as needed
         }
@@ -3514,15 +3570,19 @@ function enableDashboardEditMode() {
         container.classList.add('dashboard-edit-mode');
     }
     
-    // Initialize sortable
-    initSortable();
+    // Re-render dashboard items to show/hide edit controls
+    renderDashboardItems();
+    
+    // Add chart visibility toggle button in edit mode
+    addChartVisibilityToggle();
     
     // Show toast
     showToast('info', 'Edit Mode', 'Dashboard is now in edit mode. Drag and drop items to rearrange them.');
 }
 
+// ...
 // Disable dashboard edit mode
-function disableDashboardEditMode() {
+async function disableDashboardEditMode() {
     dashboardEditMode = false;
     
     // Show/hide buttons
@@ -3536,8 +3596,16 @@ function disableDashboardEditMode() {
         container.classList.remove('dashboard-edit-mode');
     }
     
-    // Reinitialize items (discard changes)
-    loadDashboardItems();
+    // Remove chart visibility toggle
+    removeChartVisibilityToggle();
+    
+    // Force reload from server to revert any unsaved changes
+    await loadDashboardItems();
+    
+    // Also update chart datasets in case chart visibility was changed
+    if (dashboardChart && dashboardChartVisible) {
+        updateDashboardChartDatasets();
+    }
 }
 
 // Initialize sortable for drag & drop reordering
@@ -3599,13 +3667,22 @@ async function saveDashboardOrder() {
             display_order: item.display_order
         }));
         
-        // Save to server
+        // Save to server including chart configuration
+        const saveData = {
+            items: updatedItems,
+            chart_visible: dashboardChartVisible,
+            chart_items: dashboardItems.filter(item => item.show_in_chart).map(item => ({
+                board_index: item.board_index,
+                channel_index: item.channel_index
+            }))
+        };
+        
         const response = await fetch('/api/dashboard/order', {
             method: 'POST',
             headers: {
                 'Content-Type': 'application/json'
             },
-            body: JSON.stringify({ items: updatedItems })
+            body: JSON.stringify(saveData)
         });
         
         const data = await response.json();
@@ -3794,4 +3871,430 @@ function resetClientTemperatureHistory() {
         timestamps: [],
         channels: []
     };
+}
+
+// Dashboard Chart Functions
+
+// Toggle chart visibility in edit mode
+function addChartVisibilityToggle() {
+    const dashboardHeader = document.querySelector('.dashboard-header .dashboard-controls');
+    if (!dashboardHeader) return;
+    
+    // Check if toggle already exists
+    if (document.getElementById('chartVisibilityToggle')) return;
+    
+    const chartToggle = document.createElement('button');
+    chartToggle.id = 'chartVisibilityToggle';
+    chartToggle.className = `btn btn-secondary ${dashboardChartVisible ? 'active' : ''}`;
+    chartToggle.innerHTML = `<i class="fas fa-chart-line"></i> ${dashboardChartVisible ? 'Hide Chart' : 'Show Chart'}`;
+    chartToggle.onclick = toggleDashboardChartVisibility;
+    
+    dashboardHeader.appendChild(chartToggle);
+}
+
+// Remove chart visibility toggle
+function removeChartVisibilityToggle() {
+    const toggle = document.getElementById('chartVisibilityToggle');
+    if (toggle) {
+        toggle.remove();
+    }
+}
+
+// Toggle dashboard chart visibility
+function toggleDashboardChartVisibility() {
+    dashboardChartVisible = !dashboardChartVisible;
+    
+    const chartSection = document.getElementById('dashboardChartSection');
+    const toggle = document.getElementById('chartVisibilityToggle');
+    
+    if (chartSection) {
+        chartSection.style.display = dashboardChartVisible ? 'block' : 'none';
+    }
+    
+    if (toggle) {
+        toggle.className = `btn btn-secondary ${dashboardChartVisible ? 'active' : ''}`;
+        toggle.innerHTML = `<i class="fas fa-chart-line"></i> ${dashboardChartVisible ? 'Hide Chart' : 'Show Chart'}`;
+    }
+    
+    // Initialize chart if showing for the first time
+    if (dashboardChartVisible && !dashboardChart) {
+        initDashboardChart();
+    }
+}
+
+// Toggle chart inclusion for a dashboard item
+function toggleDashboardItemChart(boardIndex, channelIndex) {
+    const item = dashboardItems.find(item => 
+        item.board_index == boardIndex && item.channel_index == channelIndex
+    );
+    
+    if (!item) return;
+    
+    item.show_in_chart = !item.show_in_chart;
+    
+    // Update the button appearance and visual indicator
+    const dashboardItem = document.getElementById(`dashboard-item-${boardIndex}-${channelIndex}`);
+    if (dashboardItem) {
+        const isInChart = item.show_in_chart;
+        
+        // Update visual indicator
+        if (isInChart) {
+            dashboardItem.classList.add('in-chart');
+        } else {
+            dashboardItem.classList.remove('in-chart');
+        }
+        
+        // Update button
+        const button = dashboardItem.querySelector('.chart-toggle button');
+        if (button) {
+            button.className = `btn btn-sm ${isInChart ? 'btn-success' : 'btn-secondary'}`;
+            button.innerHTML = `<i class="fas fa-chart-line"></i> ${isInChart ? 'In Chart' : 'Add to Chart'}`;
+        }
+    }
+    
+    // Update chart if visible
+    if (dashboardChartVisible && dashboardChart) {
+        updateDashboardChartDatasets();
+    }
+}
+
+// Note: Chart visibility and chart items are now saved only when the Save button is pressed
+// This function has been removed to prevent immediate saving of chart changes
+
+// Initialize dashboard chart
+function initDashboardChart() {
+    const ctx = document.getElementById('dashboardChart');
+    if (!ctx) return;
+    
+    // Initialize temperature history for dashboard
+    resetDashboardTemperatureHistory();
+    
+    // Set up timeframe change handler
+    const timeframeSelect = document.getElementById('dashboardChartTimeframe');
+    if (timeframeSelect) {
+        timeframeSelect.addEventListener('change', function() {
+            dashboardChartTimeframe = parseInt(this.value);
+            calculateDashboardUpdateInterval();
+            
+            // Instead of resetting, trim existing data to new timeframe
+            trimDashboardTemperatureHistory();
+            
+            // Update chart to reflect new timeframe
+            if (dashboardChart) {
+                updateDashboardChart();
+            }
+            
+            // Restart refresh interval with new update rate
+            if (dashboardRefreshInterval) {
+                clearInterval(dashboardRefreshInterval);
+                dashboardRefreshInterval = setInterval(refreshDashboardData, dashboardUpdateInterval);
+            }
+        });
+    }
+    
+    // Create initial empty chart
+    dashboardChart = new Chart(ctx, {
+        type: 'line',
+        data: {
+            labels: [],
+            datasets: []
+        },
+        options: {
+            responsive: true,
+            maintainAspectRatio: false,
+            animation: {
+                duration: 500
+            },
+            plugins: {
+                legend: {
+                    display: false
+                },
+                tooltip: {
+                    mode: 'index',
+                    intersect: false,
+                    callbacks: {
+                        label: function(context) {
+                            const label = context.dataset.label || '';
+                            const value = context.parsed.y;
+                            return `${label}: ${value !== null ? value.toFixed(1) : 'N/A'}°C`;
+                        },
+                        title: function(tooltipItems) {
+                            if (tooltipItems && tooltipItems.length > 0) {
+                                return `${tooltipItems[0].label} ago`;
+                            }
+                            return '';
+                        }
+                    }
+                }
+            },
+            scales: {
+                x: {
+                    title: {
+                        display: true,
+                        text: 'Time ago'
+                    },
+                    reverse: true,
+                    ticks: {
+                        maxTicksLimit: 10
+                    }
+                },
+                y: {
+                    title: {
+                        display: true,
+                        text: 'Temperature (°C)'
+                    }
+                }
+            }
+        }
+    });
+    
+    // Create legend container
+    createDashboardChartLegend();
+}
+
+// Reset dashboard temperature history
+function resetDashboardTemperatureHistory() {
+    dashboardTemperatureHistory = {
+        timestamps: [],
+        channels: []
+    };
+}
+
+// Trim dashboard temperature history to current timeframe (retains existing data)
+function trimDashboardTemperatureHistory() {
+    if (!dashboardTemperatureHistory.timestamps.length) return;
+    
+    const currentTime = Date.now() / 1000;
+    const cutoffTime = currentTime - dashboardChartTimeframe;
+    
+    // Find first index to keep
+    let startIndex = 0;
+    for (let i = 0; i < dashboardTemperatureHistory.timestamps.length; i++) {
+        if (dashboardTemperatureHistory.timestamps[i] >= cutoffTime) {
+            startIndex = i;
+            break;
+        }
+    }
+    
+    // Trim timestamps
+    dashboardTemperatureHistory.timestamps = dashboardTemperatureHistory.timestamps.slice(startIndex);
+    
+    // Trim all channel data
+    dashboardTemperatureHistory.channels.forEach(channel => {
+        channel.data = channel.data.slice(startIndex);
+    });
+    
+    console.log(`Trimmed dashboard history to ${dashboardChartTimeframe}s timeframe, kept ${dashboardTemperatureHistory.timestamps.length} points`);
+}
+
+// Calculate dashboard update interval based on timeframe and channel count
+function calculateDashboardUpdateInterval() {
+    const chartItems = dashboardItems.filter(item => item.show_in_chart);
+    const channelCount = Math.max(1, chartItems.length);
+    
+    // Calculate required interval to stay within MAX_DASHBOARD_POINTS
+    const requiredInterval = Math.max(
+        MIN_UPDATE_INTERVAL,
+        Math.floor((dashboardChartTimeframe * 1000) / (MAX_DASHBOARD_POINTS / channelCount))
+    );
+    
+    dashboardUpdateInterval = requiredInterval;
+    console.log(`Dashboard update interval: ${dashboardUpdateInterval}ms for ${channelCount} channels over ${dashboardChartTimeframe}s`);
+}
+
+// Update dashboard temperature history
+function updateDashboardTemperatureHistory() {
+    if (!dashboardChartVisible) return;
+    
+    const currentTime = Math.floor(Date.now() / 1000);
+    const maxPoints = Math.floor(MAX_DASHBOARD_POINTS / Math.max(1, dashboardItems.filter(item => item.show_in_chart).length));
+    
+    // Only add data if enough time has passed since last update
+    if (dashboardTemperatureHistory.timestamps.length > 0) {
+        const lastTime = dashboardTemperatureHistory.timestamps[dashboardTemperatureHistory.timestamps.length - 1];
+        if (currentTime - lastTime < Math.floor(dashboardUpdateInterval / 1000)) {
+            return; // Skip this update
+        }
+    }
+    
+    // Add timestamp
+    dashboardTemperatureHistory.timestamps.push(currentTime);
+    
+    // Get items that should be in chart
+    const chartItems = dashboardItems.filter(item => item.show_in_chart);
+    
+    // Initialize channels if needed
+    chartItems.forEach((item, index) => {
+        if (!dashboardTemperatureHistory.channels[index]) {
+            dashboardTemperatureHistory.channels[index] = {
+                board_index: item.board_index,
+                channel_index: item.channel_index,
+                label: `${item.board_name} - ${item.channel_name}`,
+                data: []
+            };
+        }
+    });
+    
+    // Add temperature data for each chart item
+    chartItems.forEach((item, index) => {
+        const dashboardItem = document.getElementById(`dashboard-item-${item.board_index}-${item.channel_index}`);
+        let tempValue = null;
+        
+        if (dashboardItem) {
+            const tempElement = dashboardItem.querySelector('.temperature');
+            if (tempElement && tempElement.textContent) {
+                const tempText = tempElement.textContent.replace(/[^\d.-]/g, '');
+                const temp = parseFloat(tempText);
+                if (!isNaN(temp)) {
+                    tempValue = temp;
+                }
+            }
+        }
+        
+        dashboardTemperatureHistory.channels[index].data.push(tempValue);
+    });
+    
+    // Trim data to stay within timeframe and point limits
+    const cutoffTime = currentTime - dashboardChartTimeframe;
+    
+    // Find first index to keep
+    let startIndex = 0;
+    for (let i = 0; i < dashboardTemperatureHistory.timestamps.length; i++) {
+        if (dashboardTemperatureHistory.timestamps[i] >= cutoffTime) {
+            startIndex = i;
+            break;
+        }
+    }
+    
+    // Also limit by max points
+    const maxStartIndex = Math.max(0, dashboardTemperatureHistory.timestamps.length - maxPoints);
+    startIndex = Math.max(startIndex, maxStartIndex);
+    
+    // Trim arrays
+    if (startIndex > 0) {
+        dashboardTemperatureHistory.timestamps = dashboardTemperatureHistory.timestamps.slice(startIndex);
+        dashboardTemperatureHistory.channels.forEach(channel => {
+            channel.data = channel.data.slice(startIndex);
+        });
+    }
+    
+    // Update chart
+    if (dashboardChart) {
+        updateDashboardChart();
+    }
+}
+
+// Update dashboard chart with current data
+function updateDashboardChart() {
+    if (!dashboardChart || !dashboardChartVisible) return;
+    
+    // Update labels
+    dashboardChart.data.labels = dashboardTemperatureHistory.timestamps.map(timestamp => {
+        const currentTime = new Date().getTime() / 1000;
+        const secondsAgo = Math.round(currentTime - timestamp);
+        const displaySeconds = secondsAgo >= 0 ? secondsAgo : 0;
+        
+        if (displaySeconds < 60) {
+            return displaySeconds + 's';
+        } else {
+            const minutes = Math.floor(displaySeconds / 60);
+            const remainingSeconds = displaySeconds % 60;
+            return `${minutes}m${remainingSeconds > 0 ? remainingSeconds + 's' : ''}`;
+        }
+    });
+    
+    // Update existing datasets or create new ones
+    dashboardTemperatureHistory.channels.forEach((channel, index) => {
+        if (index < dashboardChart.data.datasets.length) {
+            // Update existing dataset
+            dashboardChart.data.datasets[index].data = channel.data;
+            dashboardChart.data.datasets[index].label = channel.label;
+        } else {
+            // Add new dataset
+            dashboardChart.data.datasets.push({
+                label: channel.label,
+                data: channel.data,
+                borderColor: chartColors[index % chartColors.length],
+                backgroundColor: chartColors[index % chartColors.length] + '20',
+                fill: false,
+                tension: 0.2,
+                pointRadius: 1,
+                borderWidth: 2
+            });
+        }
+    });
+    
+    // Remove extra datasets if there are fewer channels now
+    if (dashboardChart.data.datasets.length > dashboardTemperatureHistory.channels.length) {
+        dashboardChart.data.datasets.length = dashboardTemperatureHistory.channels.length;
+    }
+    
+    // Use smooth update without animation
+    dashboardChart.update('none');
+    
+    // Update legend
+    updateDashboardChartLegend();
+}
+
+// Update chart datasets when items are toggled
+function updateDashboardChartDatasets() {
+    // Reset and rebuild temperature history for new dataset configuration
+    resetDashboardTemperatureHistory();
+    
+    // Update legend
+    createDashboardChartLegend();
+}
+
+// Create dashboard chart legend
+function createDashboardChartLegend() {
+    const legendContainer = document.getElementById('dashboardChartLegend');
+    if (!legendContainer) return;
+    
+    legendContainer.innerHTML = '';
+    
+    const chartItems = dashboardItems.filter(item => item.show_in_chart);
+    
+    chartItems.forEach((item, index) => {
+        const color = chartColors[index % chartColors.length];
+        
+        const legendItem = document.createElement('div');
+        legendItem.className = 'legend-item';
+        legendItem.dataset.index = index;
+        
+        legendItem.innerHTML = `
+            <div class="legend-color" style="background-color: ${color};"></div>
+            <div class="legend-label">${item.board_name} - ${item.channel_name}</div>
+        `;
+        
+        // Add click event to toggle visibility
+        legendItem.addEventListener('click', function() {
+            const index = parseInt(this.dataset.index);
+            if (dashboardChart && typeof dashboardChart.isDatasetVisible === 'function') {
+                const visibility = dashboardChart.isDatasetVisible(index);
+                dashboardChart.setDatasetVisibility(index, !visibility);
+                this.classList.toggle('disabled', visibility);
+                dashboardChart.update();
+            }
+        });
+        
+        legendContainer.appendChild(legendItem);
+    });
+}
+
+// Update dashboard chart legend
+function updateDashboardChartLegend() {
+    const legendContainer = document.getElementById('dashboardChartLegend');
+    if (!legendContainer) return;
+    
+    const legendItems = legendContainer.querySelectorAll('.legend-item');
+    const chartItems = dashboardItems.filter(item => item.show_in_chart);
+    
+    chartItems.forEach((item, index) => {
+        if (index < legendItems.length) {
+            const labelElement = legendItems[index].querySelector('.legend-label');
+            if (labelElement) {
+                labelElement.textContent = `${item.board_name} - ${item.channel_name}`;
+            }
+        }
+    });
 }

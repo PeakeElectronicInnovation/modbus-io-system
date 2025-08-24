@@ -15,11 +15,14 @@ struct DashboardItem {
     uint8_t boardIndex;
     uint8_t channelIndex;
     uint8_t displayOrder;
+    bool showInChart;
 };
 
 // Dashboard configuration structure
 struct DashboardConfig {
     uint8_t itemCount;
+    bool chartVisible;
+    uint8_t chartItemCount;
     DashboardItem items[MAX_DASHBOARD_ITEMS]; // Maximum dashboard items (80 channels)
 };
 
@@ -37,6 +40,7 @@ void handleSaveDashboardOrder(void);
 bool addDashboardItem(uint8_t boardIndex, uint8_t channelIndex);
 bool removeDashboardItem(uint8_t boardIndex, uint8_t channelIndex);
 bool updateDashboardOrder(uint8_t *boardIndices, uint8_t *channelIndices, uint8_t *displayOrders, uint8_t count);
+bool updateDashboardOrderWithChart(uint8_t *boardIndices, uint8_t *channelIndices, uint8_t *displayOrders, bool *showInChart, uint8_t count);
 
 // Global variables
 extern DashboardConfig dashboardConfig;

@@ -106,19 +106,48 @@
                     <div class="dashboard-container">
                         <div class="dashboard-header">
                             <div class="dashboard-controls">
-                                <button id="editDashboardBtn" class="btn btn-primary"><i class="fas fa-edit"></i> Edit</button>
-                                <button id="saveDashboardBtn" class="btn btn-primary" style="display: none;"><i class="fas fa-save"></i> Save Layout</button>
-                                <button id="cancelDashboardBtn" class="btn btn-secondary" style="display: none;"><i class="fas fa-cancel"></i> Cancel</button>
+                                <button id="editDashboardBtn" class="btn btn-primary">
+                                    <i class="fas fa-edit"></i> Edit Dashboard
+                                </button>
+                                <button id="saveDashboardBtn" class="btn btn-success" style="display: none;">
+                                    <i class="fas fa-save"></i> Save Changes
+                                </button>
+                                <button id="cancelDashboardBtn" class="btn btn-secondary" style="display: none;">
+                                    <i class="fas fa-times"></i> Cancel
+                                </button>
                             </div>
                         </div>
                         
-                        <div id="noDashboardItems" class="no-dashboard-items">
-                            <p>No items configured for dashboard display.</p>
-                            <p>You can select items to show on the dashboard in the Board Configuration page by enabling the "Show on Dashboard" option for each channel.</p>
+                        <div id="dashboardChartSection" class="dashboard-chart-section" style="display: none;">
+                            <div class="chart-header">
+                                <h3>Temperature History</h3>
+                                <div class="chart-controls">
+                                    <select id="dashboardChartTimeframe" class="form-control">
+                                        <option value="300">5 minutes</option>
+                                        <option value="900">15 minutes</option>
+                                        <option value="1800" selected>30 minutes</option>
+                                        <option value="3600">1 hour</option>
+                                        <option value="7200">2 hours</option>
+                                        <option value="14400">4 hours</option>
+                                        <option value="21600">6 hours</option>
+                                        <option value="28800">8 hours</option>
+                                        <option value="43200">12 hours</option>
+                                    </select>
+                                </div>
+                            </div>
+                            <div class="chart-container">
+                                <canvas id="dashboardChart" width="800" height="400"></canvas>
+                            </div>
+                            <div id="dashboardChartLegend" class="chart-legend"></div>
+                        </div>
+                        
+                        <div id="noDashboardItems" class="no-dashboard-items" style="display: none;">
+                            <p>No dashboard items configured.</p>
+                            <p>Go to <strong>Board Configuration</strong> and enable "Show on dashboard" for thermocouple channels you want to display here.</p>
                         </div>
                         
                         <div id="dashboardItemsContainer" class="dashboard-items-container">
-                            <!-- Dashboard items will be displayed here -->
+                            <!-- Dashboard items will be populated here -->
                         </div>
                     </div>
                 </div>
