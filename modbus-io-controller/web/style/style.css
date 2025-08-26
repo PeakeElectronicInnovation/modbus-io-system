@@ -1666,13 +1666,6 @@ padding-top: 25px; /* Add extra padding to accommodate corner badge */
     width: 100% !important;
 }
 
-.chart-controls {
-    display: flex;
-    flex-wrap: wrap;
-    gap: 10px;
-    margin-bottom: 15px;
-}
-
 .chart-legend {
     display: flex;
     flex-wrap: wrap;
@@ -2070,7 +2063,7 @@ padding-top: 25px; /* Add extra padding to accommodate corner badge */
 /* Move handle for dashboard items in edit mode (only for items not in chart) */
 .dashboard-edit-mode .dashboard-item:not(.in-chart)::after {
     content: '\f047';
-    font-family: 'Font Awesome 5 Free';
+    font-family: 'Font Awesome 6 Free';
     font-weight: 900;
     position: absolute;
     top: 10px;
@@ -2097,25 +2090,25 @@ min-height: 150px;
 .dashboard-chart-section {
 background-color: var(--panel-bg, white);
 border-radius: 8px;
-padding: 20px;
-margin-bottom: 30px;
+padding: 15px;
+margin-bottom: 20px;
 box-shadow: 0 2px 4px rgba(0,0,0,0.1);
-margin-top: 20px;
+margin-top: 5px;
 }
 
 .chart-header {
 display: flex;
 justify-content: space-between;
 align-items: center;
-margin-bottom: 20px;
-border-bottom: 1px solid #eee;
-padding-bottom: 15px;
+margin-bottom: 5px;
+padding-bottom: 8px;
 }
 
 .chart-header h3 {
 margin: 0;
-color: #333;
-font-size: 1.3em;
+color: #555;
+font-size: 1.1em;
+font-weight: 500;
 }
 
 .chart-controls {
@@ -2132,6 +2125,7 @@ color: #555;
 .chart-container {
 position: relative;
 height: 400px;
+margin-top: 0px;
 margin-bottom: 20px;
 background-color: #fafafa;
 border-radius: 4px;
@@ -2151,21 +2145,26 @@ border-radius: 4px;
     z-index: 10;
 }
 
-/* Chart indicator for dashboard items */
+/* Chart indicator for dashboard items - positioned at bottom right */
 .dashboard-item.in-chart::before {
     content: '\f201';
-    font-family: 'Font Awesome 5 Free';
+    font-family: 'Font Awesome 6 Free';
     font-weight: 900;
     position: absolute;
-    top: 10px;
-    right: 10px;
-    font-size: 14px;
+    bottom: 20px;
+    right: 20px;
+    font-size: 12px;
     color: #28a745;
     background-color: white;
-    padding: 2px;
+    padding: 2px 4px;
     border-radius: 3px;
     box-shadow: 0 1px 3px rgba(0,0,0,0.2);
-    z-index: 10;
+    z-index: 5;
+}
+
+/* Hide chart indicator when in edit mode to avoid obscuring the In Chart button */
+.dashboard-edit-mode .dashboard-item.in-chart::before {
+    display: none;
 }
 
 .dashboard-item .chart-toggle .btn {
@@ -2200,12 +2199,25 @@ color: white;
 
 /* Chart Legend Styles */
 .chart-legend {
-display: flex;
-flex-wrap: wrap;
-gap: 15px;
-margin-top: 15px;
-padding-top: 15px;
-border-top: 1px solid #eee;
+    display: flex;
+    justify-content: space-between;
+    align-items: flex-start;
+    gap: 15px;
+    margin-top: 15px;
+    padding-top: 15px;
+    border-top: 1px solid #eee;
+}
+
+.chart-legend .legend-items {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 15px;
+    flex: 1;
+}
+
+.chart-legend #dashboardChartTimeframe {
+    width: 180px;
+    flex-shrink: 0;
 }
 
 .legend-item {

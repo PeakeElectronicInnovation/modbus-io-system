@@ -6,8 +6,8 @@
     <link rel="icon" type="image/x-icon" href="images/favicon.ico">
     <title>Sensor Interface System</title>
     <link rel="stylesheet" href="style/style.css">
-    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
-    <script src="https://cdn.jsdelivr.net/npm/sortablejs@latest/Sortable.min.js"></script>
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css" onerror="this.onerror=null;this.href='fonts/fontawesome.css'">
+    <script src="https://cdn.jsdelivr.net/npm/sortablejs@latest/Sortable.min.js" onerror="this.onerror=null;this.src='script/sortable.min.js'"></script>
 </head>
 <body>
     <!-- Loading overlay -->
@@ -121,24 +121,23 @@
                         <div id="dashboardChartSection" class="dashboard-chart-section" style="display: none;">
                             <div class="chart-header">
                                 <h3>Temperature History</h3>
-                                <div class="chart-controls">
-                                    <select id="dashboardChartTimeframe" class="form-control">
-                                        <option value="300">5 minutes</option>
-                                        <option value="900">15 minutes</option>
-                                        <option value="1800" selected>30 minutes</option>
-                                        <option value="3600">1 hour</option>
-                                        <option value="7200">2 hours</option>
-                                        <option value="14400">4 hours</option>
-                                        <option value="21600">6 hours</option>
-                                        <option value="28800">8 hours</option>
-                                        <option value="43200">12 hours</option>
-                                    </select>
-                                </div>
                             </div>
                             <div class="chart-container">
                                 <canvas id="dashboardChart" width="800" height="400"></canvas>
                             </div>
-                            <div id="dashboardChartLegend" class="chart-legend"></div>
+                            <div id="dashboardChartLegend" class="chart-legend">
+                                <select id="dashboardChartTimeframe" class="form-control">
+                                    <option value="300">5 minutes</option>
+                                    <option value="900">15 minutes</option>
+                                    <option value="1800" selected>30 minutes</option>
+                                    <option value="3600">1 hour</option>
+                                    <option value="7200">2 hours</option>
+                                    <option value="14400">4 hours</option>
+                                    <option value="21600">6 hours</option>
+                                    <option value="28800">8 hours</option>
+                                    <option value="43200">12 hours</option>
+                                </select>
+                            </div>
                         </div>
                         
                         <div id="noDashboardItems" class="no-dashboard-items" style="display: none;">

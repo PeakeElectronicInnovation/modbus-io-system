@@ -35,6 +35,18 @@ void manageTerminal(void)
         printNetConfig(networkConfig);
       }
 
+      // IP Static Assign Temp-------------------------------->
+      else if (strcmp(serialString, "ipstatic") == 0) {
+        log(LOG_INFO, false, "Assigning static IP address...\n");
+        setStaticIPcmd = true;
+      }
+
+      // IP Static Assign Temp-------------------------------->
+      else if (strcmp(serialString, "ipdhcp") == 0) {
+        log(LOG_INFO, false, "Assigning DHCP...\n");
+        setDHCPcmd = true;
+      }
+
       // SD Card --------------------------------------------->
       else if (strcmp(serialString, "sd") == 0) {
         log(LOG_INFO, false, "Getting SD card info...\n");
@@ -86,7 +98,7 @@ void manageTerminal(void)
       }
       else {
         log(LOG_INFO, false, "Unknown command: %s\n", serialString);
-        log(LOG_INFO, false, "Available commands: \n\t- ip \t\t(print IP address)\n\t- sd \t\t(print SD card info)\n\t- status\n\t- assign \t(assign modbus address)\n\t- config -x\t(print board x configuration)\n\t- almrst -x\t(reset thermocouple latches for board x)\n\t- reboot\n");
+        log(LOG_INFO, false, "Available commands: \n\t- ip \t\t(print IP address)\n\t- ipstatic \t(assign 192.168.1.100)\n\t- ipdhcp \t(assign DHCP)\n\t- sd \t\t(print SD card info)\n\t- status\n\t- assign \t(assign modbus address)\n\t- config -x\t(print board x configuration)\n\t- almrst -x\t(reset thermocouple latches for board x)\n\t- reboot\n");
       }
     }
     // Clear the serial buffer each loop.

@@ -3135,8 +3135,8 @@ function updateTemperatureChart(data) {
                     backgroundColor: chartColors[index % chartColors.length] + '20', // Add transparency for fill
                     fill: false,
                     tension: 0.2,
-                    pointRadius: 1,
-                    borderWidth: 2
+                    pointRadius: 0.75,
+                    borderWidth: 1.5
                 }))
             },
             options: {
@@ -3236,10 +3236,14 @@ document.addEventListener('DOMContentLoaded', function() {
             const localScript = document.createElement('script');
             localScript.src = 'script/chart.js';
             localScript.onload = function() {
-                console.log('Local Chart.js loaded successfully');
+                console.log('Chart.js loaded successfully from local file');
+                // Trigger any pending dashboard chart initialization
+                if (typeof initDashboardChart === 'function' && dashboardChartVisible && !dashboardChart) {
+                    setTimeout(initDashboardChart, 100);
+                }
             };
             localScript.onerror = function() {
-                console.error('Failed to load Chart.js from local fallback');
+                console.error('Failed to load Chart.js from both CDN and local file');
             };
             document.head.appendChild(localScript);
         }
@@ -3257,6 +3261,10 @@ document.addEventListener('DOMContentLoaded', function() {
         script.onload = function() {
             clearTimeout(timeoutId); // Cancel the timeout
             console.log('Chart.js loaded successfully from CDN');
+            // Trigger any pending dashboard chart initialization
+            if (typeof initDashboardChart === 'function' && dashboardChartVisible && !dashboardChart) {
+                setTimeout(initDashboardChart, 100);
+            }
         };
         
         script.onerror = function() {
@@ -3674,11 +3682,20 @@ function initSortable() {
         console.error('Sortable library not loaded. Please include Sortable.js in your project.');
         showToast('error', 'Error', 'Sortable library not loaded. Edit mode may not work correctly.');
         
-        // Load Sortable.js dynamically
+        // Load Sortable.js dynamically with fallback
         const script = document.createElement('script');
         script.src = 'https://cdn.jsdelivr.net/npm/sortablejs@latest/Sortable.min.js';
         script.onload = function() {
             initSortable();
+        };
+        script.onerror = function() {
+            // Fallback to local version
+            const fallbackScript = document.createElement('script');
+            fallbackScript.src = 'script/sortable.min.js';
+            fallbackScript.onload = function() {
+                initSortable();
+            };
+            document.head.appendChild(fallbackScript);
         };
         document.head.appendChild(script);
     }
@@ -4009,6 +4026,15 @@ function initDashboardChart() {
     const ctx = document.getElementById('dashboardChart');
     if (!ctx) return;
     
+    // Check if Chart.js is loaded
+    if (typeof Chart === 'undefined') {
+        console.log('Chart.js not loaded yet, deferring dashboard chart initialization');
+        setTimeout(() => {
+            initDashboardChart();
+        }, 500);
+        return;
+    }
+    
     // Initialize temperature history for dashboard
     resetDashboardTemperatureHistory();
     
@@ -4261,8 +4287,8 @@ function updateDashboardChart() {
                 backgroundColor: chartColors[index % chartColors.length] + '20',
                 fill: false,
                 tension: 0.2,
-                pointRadius: 1,
-                borderWidth: 2
+                pointRadius: 0.75,
+                borderWidth: 1.5
             });
         }
     });
@@ -4293,7 +4319,23 @@ function createDashboardChartLegend() {
     const legendContainer = document.getElementById('dashboardChartLegend');
     if (!legendContainer) return;
     
-    legendContainer.innerHTML = '';
+    // Find or create the legend items container
+    let legendItemsContainer = legendContainer.querySelector('.legend-items');
+    if (!legendItemsContainer) {
+        legendItemsContainer = document.createElement('div');
+        legendItemsContainer.className = 'legend-items';
+        // Insert before the timeframe selector if it exists
+        const timeframeSelector = legendContainer.querySelector('#dashboardChartTimeframe');
+        if (timeframeSelector) {
+            legendContainer.insertBefore(legendItemsContainer, timeframeSelector);
+        } else {
+            legendContainer.appendChild(legendItemsContainer);
+        }
+    }
+    
+    // Remove only existing legend items, preserve other content like timeframe selector
+    const existingLegendItems = legendItemsContainer.querySelectorAll('.legend-item');
+    existingLegendItems.forEach(item => item.remove());
     
     const chartItems = dashboardItems.filter(item => item.show_in_chart);
     
@@ -4320,7 +4362,7 @@ function createDashboardChartLegend() {
             }
         });
         
-        legendContainer.appendChild(legendItem);
+        legendItemsContainer.appendChild(legendItem);
     });
 }
 

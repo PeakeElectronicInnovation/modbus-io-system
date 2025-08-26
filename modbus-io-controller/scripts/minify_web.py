@@ -127,6 +127,7 @@ def minify_files(target=None, source=None, env=None):
     (data_dir / "script").mkdir(parents=True, exist_ok=True)
     (data_dir / "style").mkdir(parents=True, exist_ok=True)
     (data_dir / "images").mkdir(parents=True, exist_ok=True)
+    (data_dir / "fonts").mkdir(parents=True, exist_ok=True)
     
     # Check if Terser is available without npm installation
     use_terser = check_terser_available()
@@ -135,6 +136,13 @@ def minify_files(target=None, source=None, env=None):
     js_files = list(web_dir.glob("script/*.js"))
     for js_file in js_files:
         output_file = data_dir / "script" / js_file.name
+        
+        # Skip minification for already minified files (like sortable.min.js)
+        if js_file.name.endswith('.min.js'):
+            print(f"Copying pre-minified JS: {js_file.name}")
+            shutil.copy2(js_file, output_file)
+            continue
+            
         print(f"Minifying JS: {js_file.name}")
         
         # Try Terser minification first, fallback to safe Python minification
@@ -182,6 +190,14 @@ def minify_files(target=None, source=None, env=None):
                 output_file = data_dir / "images" / img_file.name
                 print(f"Copying image: {img_file.name}")
                 shutil.copy2(img_file, output_file)
+    
+    # Copy font files (Font Awesome and other fonts)
+    if (web_dir / "fonts").exists():
+        for font_file in (web_dir / "fonts").iterdir():
+            if font_file.is_file():
+                output_file = data_dir / "fonts" / font_file.name
+                print(f"Copying font: {font_file.name}")
+                shutil.copy2(font_file, output_file)
     
     print("Web asset minification completed!")
     

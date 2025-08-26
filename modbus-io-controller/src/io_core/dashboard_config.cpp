@@ -256,6 +256,9 @@ void handleGetDashboardItems() {
         saveDashboardConfig();
     }
     
+    // Add chart configuration to response
+    doc["chart_visible"] = dashboardConfig.chartVisible;
+    
     // Serialize response
     String response;
     serializeJson(doc, response);

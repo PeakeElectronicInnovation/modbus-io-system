@@ -32,6 +32,8 @@ void setupEthernet(void);
 bool loadNetworkConfig(void);
 void saveNetworkConfig(void);
 bool applyNetworkConfig(void);
+void setStaticIP(void);
+void setDHCP(void);
 
 // Web server initialization
 void setupWebServer(void);
@@ -84,3 +86,5 @@ extern uint32_t ntpUpdateTimestamp;
 extern uint32_t lastNTPUpdateTime; // Last successful NTP update time
 
 extern bool ethernetConnected;
+extern bool setStaticIPcmd;
+extern bool setDHCPcmd;

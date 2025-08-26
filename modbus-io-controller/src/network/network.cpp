@@ -16,6 +16,8 @@ uint32_t lastNTPUpdateTime = 0; // Last successful NTP update time
 char deviceMacAddress[18];
 
 bool ethernetConnected = false;
+bool setStaticIPcmd = false;
+bool setDHCPcmd = false;
 unsigned long lastNetworkCheckTime = 0;
 
 // Network component initialisation functions ------------------------------>
@@ -246,7 +248,10 @@ bool applyNetworkConfig()
       log(LOG_WARNING, true, "Failed to configure Ethernet using DHCP, falling back to 192.168.1.100\n");
       IPAddress defaultIP = {192, 168, 1, 100};
       eth.config(defaultIP);
-      if (!eth.begin()) return false;
+      if (!eth.begin()) {
+        log(LOG_WARNING, true, "Failed to configure Ethernet using static IP, falling back to saved configuration\n");
+        return false;
+      }
     }
   }
   else
@@ -255,6 +260,26 @@ bool applyNetworkConfig()
     if (!eth.begin()) return false;
   }
   return true;
+}
+
+void setStaticIP()
+{
+  log(LOG_INFO, true, "Setting static IP to 192.168.1.100\n");
+  networkConfig.useDHCP = false;
+  saveNetworkConfig();
+  log(LOG_INFO, true, "Restarting...\n");
+  delay(1000);
+  rp2040.restart();
+}
+
+void setDHCP()
+{
+  log(LOG_INFO, true, "Setting DHCP\n");
+  networkConfig.useDHCP = true;
+  saveNetworkConfig();
+  log(LOG_INFO, true, "Restarting...\n");
+  delay(1000);
+  rp2040.restart();
 }
 
 void setupNetworkAPI()
@@ -694,6 +719,11 @@ void manageEthernet(void)
       }
       log(LOG_INFO, true, "Ethernet disconnected, waiting for reconnect\n");
     } else {
+      if (setStaticIPcmd) {
+        setStaticIP();
+      } else if (setDHCPcmd) {
+        setDHCP();
+      }
       // Ethernet is still connected
       handleWebServer();
     }
@@ -777,6 +807,10 @@ void handleFile(const char *path)
     contentType = "application/json";
   else if (strstr(path, ".ico"))
     contentType = "image/x-icon";
+  else if (strstr(path, ".woff2"))
+    contentType = "font/woff2";
+  else if (strstr(path, ".woff"))
+    contentType = "font/woff";
   else
     contentType = "text/plain";
 
@@ -1010,18 +1044,6 @@ void handleSDViewFile(void) {
   String contentType = "text/plain";
   if (fileName.endsWith(".html") || fileName.endsWith(".htm")) contentType = "text/html";
   else if (fileName.endsWith(".css")) contentType = "text/css";
-  else if (fileName.endsWith(".js")) contentType = "application/javascript";
-  else if (fileName.endsWith(".json")) contentType = "application/json";
-  else if (fileName.endsWith(".png")) contentType = "image/png";
-  else if (fileName.endsWith(".jpg") || fileName.endsWith(".jpeg")) contentType = "image/jpeg";
-  else if (fileName.endsWith(".gif")) contentType = "image/gif";
-  else if (fileName.endsWith(".ico")) contentType = "image/x-icon";
-  else if (fileName.endsWith(".pdf")) contentType = "application/pdf";
-  
-  // Set headers for displaying in browser
-  server.sendHeader("Content-Type", contentType);
-  server.sendHeader("Content-Length", String(fileSize));
-  server.sendHeader("Cache-Control", "max-age=86400");
   
   // Stream the file to the client
   WiFiClient client = server.client();
