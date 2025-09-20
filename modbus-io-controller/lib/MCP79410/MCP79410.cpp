@@ -174,8 +174,42 @@ bool MCP79410::getDateTime(DateTime* dateTime) {
     dateTime->day = bcd2dec(day & 0x3F);
     dateTime->month = bcd2dec(month & 0x1F);
     dateTime->year = bcd2dec(year) + 2000;
+
+    getEpochTime(dateTime);
     
     return true;
+}
+
+void MCP79410::getEpochTime(DateTime* dateTime) {
+    uint16_t y = dateTime->year;
+    uint16_t m = dateTime->month;
+
+    // Days since 1970-01-01
+    uint32_t days = 0;
+
+    // Whole years since 1970
+    for (uint16_t year = 1970; year < y; year++) {
+        days += isLeap(year) ? 366 : 365;
+    }
+
+    // Whole months this year
+    days += days_before_month[m];
+
+    // Add leap day if after February in a leap year
+    if (m > 2 && isLeap(y)) {
+        days += 1;
+    }
+
+    // Add days in current month
+    days += dateTime->day - 1; // days are 1-based
+
+    // Convert to seconds
+    uint32_t t = (uint32_t)days * 86400
+             + (uint32_t)dateTime->hour * 3600
+             + (uint32_t)dateTime->minute * 60
+             + (uint32_t)dateTime->second;
+
+    dateTime->epochTime = t;
 }
 
 bool MCP79410::writeSRAM(uint8_t address, uint8_t data) {
@@ -217,6 +251,10 @@ bool MCP79410::readSRAMBurst(uint8_t startAddress, uint8_t *data, uint8_t length
 
 bool MCP79410::isRunning() {
     return (read_register(REG_RTCSEC) & 0x80) == 0x80;
+}
+
+int MCP79410::isLeap(uint16_t y) {
+    return (y % 4 == 0 && (y % 100 != 0 || y % 400 == 0));
 }
 
 void MCP79410::enableOscillator(bool enable) {

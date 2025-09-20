@@ -249,12 +249,12 @@ void manage_thermocouple(uint8_t index) {
         }
         return;
     }
-    // Check if polling time has elapsed
-    if(millis() - thermocoupleIO_index.tcIO[index].lastUpdate < thermocoupleIO_index.tcIO[index].pollTime) {
+    // Check if polling time has elapsed - updated to use RTC seconds instead of millis
+    if(rtcSeconds() - thermocoupleIO_index.tcIO[index].lastUpdate < thermocoupleIO_index.tcIO[index].pollTime/1000) {
         record_thermocouple(index); // Check if record interval has elapsed before returning
         return;
     }
-    thermocoupleIO_index.tcIO[index].lastUpdate = millis();
+    thermocoupleIO_index.tcIO[index].lastUpdate = rtcSeconds();
 
     leds.setPixelColor(LED_MODBUS_STATUS, LED_STATUS_BUSY);
     leds.show();
@@ -496,7 +496,28 @@ bool record_thermocouple(uint8_t index) {
             return false;
         }
     }
-    if (millis() - thermocoupleIO_index.tcIO[index].lastRecord < thermocoupleIO_index.tcIO[index].recordInterval) return false;
+    // Exit early if record time has not elapsed
+    uint32_t seconds = rtcSeconds();
+    if (seconds == 0) {
+        log(LOG_WARNING, false, "RTC not ready or epoch time is invalid\n");
+        return false;
+    }
+    bool configChanged = false;
+    bool timeChanged = false;
+    int32_t timeDiff = seconds - thermocoupleIO_index.tcIO[index].lastRecord;
+    const int32_t MAX_TIME_DIFF = thermocoupleIO_index.tcIO[index].recordInterval/250;
+
+    if (timeDiff > MAX_TIME_DIFF || timeDiff < -MAX_TIME_DIFF) {
+        if (thermocoupleIO_index.tcIO[index].lastRecord != 0) {
+            log(LOG_DEBUG, false, "Last record timestamp: %d seconds, current timestamp: %d seconds\n", thermocoupleIO_index.tcIO[index].lastRecord, seconds);
+            log(LOG_WARNING, true, "Large time difference detected: %d seconds. Recalculating record timestamp for board at index %d\n", timeDiff, index);
+        }
+        timeChanged = true;
+    } else {
+        if (seconds < thermocoupleIO_index.tcIO[index].lastRecord) return false;
+        if (timeDiff < thermocoupleIO_index.tcIO[index].recordInterval/1000) return false;
+    }
+    
     if (!thermocoupleIO_index.tcIO[index].configInitialised) return false;
     if (index >= boardCount) return false;
     if (!sdInfo.ready) return false;
@@ -504,20 +525,39 @@ bool record_thermocouple(uint8_t index) {
     // Pause recording if board is offline
     if (!getBoard(index)->connected) return false;
 
+    // Check if this is the first record to align to the next minute
+    if (timeChanged) {
+        // Set the flag for this specific board
+        thermocoupleIO_index.tcIO[index].timeChangeFlag = true;
+        // Align the first recording to 0 seconds of the next minute
+        DateTime now;
+        if (!getGlobalDateTime(now)) return false;
+        
+        // Calculate seconds until next minute boundary (0 seconds)
+        uint32_t secondsToNextMinute = (60 - now.second) % 60;
+        if (secondsToNextMinute == 0) secondsToNextMinute = 60; // If already at 0 seconds, wait for next minute
+
+        // Set lastRecord to ensure next recording happens at the minute boundary
+        uint32_t recordIntervalSeconds = thermocoupleIO_index.tcIO[index].recordInterval / 1000;
+        thermocoupleIO_index.tcIO[index].lastRecord = seconds + secondsToNextMinute - recordIntervalSeconds;
+        
+        log(LOG_DEBUG, false, "Aligning first record to next minute, epoch time: %d\n", thermocoupleIO_index.tcIO[index].lastRecord);
+        return false;
+    }
+
     // Check for a change in settings since last record
-    bool changed = false;
     for (int i = 0; i < 8; i++) {
         if (thermocoupleIO_index.tcIO[index].recordTemperature[i] != getBoard(index)->settings.thermocoupleIO.channels[i].recordTemperature) {
             thermocoupleIO_index.tcIO[index].recordTemperature[i] = getBoard(index)->settings.thermocoupleIO.channels[i].recordTemperature;
-            changed = true;
+            configChanged = true;
         }
         if (thermocoupleIO_index.tcIO[index].recordColdJunction[i] != getBoard(index)->settings.thermocoupleIO.channels[i].recordColdJunction) {
             thermocoupleIO_index.tcIO[index].recordColdJunction[i] = getBoard(index)->settings.thermocoupleIO.channels[i].recordColdJunction;
-            changed = true;
+            configChanged = true;
         }
         if (thermocoupleIO_index.tcIO[index].recordStatus[i] != getBoard(index)->settings.thermocoupleIO.channels[i].recordStatus) {
             thermocoupleIO_index.tcIO[index].recordStatus[i] = getBoard(index)->settings.thermocoupleIO.channels[i].recordStatus;
-            changed = true;
+            configChanged = true;
         }
     }
 
@@ -531,7 +571,7 @@ bool record_thermocouple(uint8_t index) {
     char fileNameBuf[100];
     snprintf(fileNameBuf, sizeof(fileNameBuf), "/sensors/%s.csv", fileName);
     bool fileExists = sd.exists(fileNameBuf);
-    bool writeHeaders = changed || !fileExists;
+    bool writeHeaders = configChanged || !fileExists;
 
     if (writeHeaders) { // Build new header string
         char buf[25];
@@ -555,38 +595,45 @@ bool record_thermocouple(uint8_t index) {
         if (record) {
             strcat(dataString, "\n");
             writeSensorData(dataString, fileName, true);
+            // Clear the buffer after writing headers to prevent duplication
+            dataString[0] = '\0';
+            record = false; // Reset record flag
         }
     }
     
-    if (!writeHeaders) { // Write sensor data (not headers)
-        char buf[10];
-        for (int i = 0; i < 8; i++) {
-            if (thermocoupleIO_index.tcIO[index].recordTemperature[i]) {
-                snprintf(buf, sizeof(buf), ",%0.2f", thermocoupleIO_index.tcIO[index].reg.temperature[i]);
-                strcat(dataString, buf);
-                record = true;
-            }
-            if (thermocoupleIO_index.tcIO[index].recordColdJunction[i]) {
-                snprintf(buf, sizeof(buf), ",%0.2f", thermocoupleIO_index.tcIO[index].reg.coldJunction[i]);
-                strcat(dataString, buf);
-                record = true;
-            }
-            if (thermocoupleIO_index.tcIO[index].recordStatus[i]) {
-                bool alarm = thermocoupleIO_index.tcIO[index].reg.alarmState[i] | thermocoupleIO_index.tcIO[index].reg.openCircuit[i] | thermocoupleIO_index.tcIO[index].reg.shortCircuit[i];
-                bool output = thermocoupleIO_index.tcIO[index].reg.outputState[i];
-                snprintf(buf, sizeof(buf), ",%d,%d", alarm, output);
-                strcat(dataString, buf);
-                record = true;
-            }
+    // Write sensor data
+    char buf[10];
+    for (int i = 0; i < 8; i++) {
+        if (thermocoupleIO_index.tcIO[index].recordTemperature[i]) {
+            snprintf(buf, sizeof(buf), ",%0.2f", thermocoupleIO_index.tcIO[index].reg.temperature[i]);
+            strcat(dataString, buf);
+            record = true;
         }
-        if (record) {
-            strcat(dataString, "\n");
-            writeSensorData(dataString, fileName, false);
+        if (thermocoupleIO_index.tcIO[index].recordColdJunction[i]) {
+            snprintf(buf, sizeof(buf), ",%0.2f", thermocoupleIO_index.tcIO[index].reg.coldJunction[i]);
+            strcat(dataString, buf);
+            record = true;
         }
+        if (thermocoupleIO_index.tcIO[index].recordStatus[i]) {
+            bool alarm = thermocoupleIO_index.tcIO[index].reg.alarmState[i] | thermocoupleIO_index.tcIO[index].reg.openCircuit[i] | thermocoupleIO_index.tcIO[index].reg.shortCircuit[i];
+            bool output = thermocoupleIO_index.tcIO[index].reg.outputState[i];
+            snprintf(buf, sizeof(buf), ",%d,%d", alarm, output);
+            strcat(dataString, buf);
+            record = true;
+        }
+    }
+    if (record) {
+        if (thermocoupleIO_index.tcIO[index].timeChangeFlag) {
+            strcat(dataString, ", <--- Time change detected");
+            thermocoupleIO_index.tcIO[index].timeChangeFlag = false;
+        }
+        strcat(dataString, "\n");
+        writeSensorData(dataString, fileName, false);
     }
 
     // Update timestamp and return success
-    thermocoupleIO_index.tcIO[index].lastRecord = millis();
+    thermocoupleIO_index.tcIO[index].lastRecord = seconds;
+    log(LOG_DEBUG, false, "Thermocouple %d last record: %d\n", index, thermocoupleIO_index.tcIO[index].lastRecord);
     return true;
 }
 

@@ -50,6 +50,9 @@ void manageTime(void)
   dateTimeLocked = true;
   DateTime currentTime;
   if (rtc.getDateTime(&currentTime)) {
+    /*log(LOG_INFO, false, "Current date and time is: %04d-%02d-%02d %02d:%02d:%02d, epoch time: %u\n",
+                  currentTime.year, currentTime.month, currentTime.day,
+                  currentTime.hour, currentTime.minute, currentTime.second, currentTime.epochTime);*/
     memcpy(&globalDateTime, &currentTime, sizeof(DateTime));
     dateTimeLocked = false;
   } else {
@@ -85,15 +88,42 @@ DateTime epochToDateTime(time_t epochTime) {
 
 bool getGlobalDateTime(DateTime &dt, uint32_t timeout) {
   uint32_t startTime = millis();
-  while (dateTimeLocked) {
-    if (millis() - startTime > timeout) return false;
+  bool wasLocked = false;
+  
+  while (dateTimeLocked || dateTimeWriteLocked) {
+    if (!wasLocked) {
+      wasLocked = true;
+      // Only log once per lock cycle to avoid spam
+    }
+    if (millis() - startTime > timeout) {
+      if (wasLocked) {
+        log(LOG_WARNING, false, "getGlobalDateTime timeout after %dms - locks: dateTime=%d, write=%d\n", 
+            timeout, dateTimeLocked, dateTimeWriteLocked);
+      }
+      return false;
+    }
+    delay(1); // Small delay to prevent busy waiting
   }
+  
   dateTimeLocked = true;
   memcpy(&dt, &globalDateTime, sizeof(DateTime));
   dateTimeLocked = false;
   return true;
 }
 
+uint32_t rtcSeconds(void) {
+  DateTime dt;
+  if (!getGlobalDateTime(dt, 1000)) {
+    return 0; // Explicitly return 0 on timeout/failure
+  }
+  
+  // Validate epochTime - should be reasonable (after year 2020)
+  if (dt.epochTime < 1577836800) { // Jan 1, 2020 00:00:00 UTC
+    return 0; // Return 0 for invalid timestamps
+  }
+  
+  return dt.epochTime;
+}
 
 // Function to safely update the DateTime
 bool updateGlobalDateTime(const DateTime &dt) {

@@ -27,6 +27,24 @@ struct DateTime {
     uint8_t hour;
     uint8_t minute;
     uint8_t second;
+    uint32_t epochTime;
+};
+
+// Days per month (non-leap year) for epoch time calculation
+static const uint16_t days_before_month[] = {
+    0,   // dummy for 1-based month
+    0,   // January
+    31,  // February
+    59,  // March
+    90,  // April
+    120, // May
+    151, // June
+    181, // July
+    212, // August
+    243, // September
+    273, // October
+    304, // November
+    334  // December
 };
 
 class MCP79410 {
@@ -50,6 +68,7 @@ public:
     bool getDateTime(uint16_t &year, uint8_t &month, uint8_t &day,
                     uint8_t &hour, uint8_t &minute, uint8_t &second);
     bool getDateTime(DateTime* dateTime);
+    void getEpochTime(DateTime* dateTime); // Sets epochTime in DateTime struct based on the Y/M/D/h/m/s contents
     
     // SRAM operations
     bool writeSRAM(uint8_t address, uint8_t data);
@@ -59,6 +78,7 @@ public:
     
     // Utility functions
     bool isRunning();
+    int isLeap(uint16_t y);
     void enableOscillator(bool enable);
     void enableBatteryBackup(bool enable);
 

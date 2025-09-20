@@ -78,13 +78,14 @@ struct thermocoupleIO_t {
     ModbusRTUMaster *bus;
     uint8_t slaveID;
     char boardName[14];
-    uint32_t lastUpdate;
-    uint32_t pollTime;
-    uint32_t lastRecord;
-    uint32_t recordInterval;
+    uint32_t lastUpdate = 0;
+    uint32_t pollTime = 0;
+    uint32_t lastRecord = 0;
+    uint32_t recordInterval = 0;
     bool recordTemperature[8];
     bool recordColdJunction[8];
     bool recordStatus[8];
+    bool timeChangeFlag = false;
     thermocoupleModbus_t reg;
     bool coils[32];
     uint16_t holdingRegisters[40]; // first 2 registers are excluded!!! read only

@@ -8,6 +8,7 @@ DateTime epochToDateTime(time_t epochTime);
 void manageTime(void);
 bool updateGlobalDateTime(const DateTime &dt);
 bool getGlobalDateTime(DateTime &dt, uint32_t timeout = 1000);
+uint32_t rtcSeconds(void);
 
 extern MCP79410 rtc;
 
@@ -17,4 +18,4 @@ extern volatile bool dateTimeWriteLocked;
 extern DateTime globalDateTime;
 
 // Update timing
-#define TIME_UPDATE_INTERVAL 1000
+#define TIME_UPDATE_INTERVAL 500
